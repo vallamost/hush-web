@@ -67,11 +67,87 @@ import {
   deleteExport,
   unwrapUploadToken,
   unwrapDownloadToken,
+  listExports,
   listMissingChunks,
+  EXPORT_STATUS_TERMINAL,
 } from './linkArchiveExportStore';
 
 const UPLOAD_CONCURRENCY = 4;
 const DOWNLOAD_CONCURRENCY = 4;
+
+/**
+ * Reclaims the server-side quota slot a previous failed transfer left
+ * behind. Without this step, a fresh `initArchive` after a failed
+ * transfer returns HTTP 409 ("concurrent archive quota exhausted") until
+ * the server's 30-minute supersede grace expires — surfaced to the user
+ * as a generic `initArchive failed` and impossible to recover from
+ * inside one session.
+ *
+ * For every locally-persisted export row for this `baseUrl` that is
+ * either explicitly terminal or whose hard deadline has passed, we:
+ *   1. Unwrap the persisted upload + download tokens (requires the
+ *      unlocked root key — same trust boundary as resume).
+ *   2. Call the server's `DELETE /link-archive/{id}`. The server treats
+ *      404 / 410 as a no-op (archive already gone).
+ *   3. Drop the local row regardless of the DELETE result — keeping it
+ *      around would let the next retry attempt the same dead row.
+ *
+ * In-progress rows are left untouched so an interrupted upload can
+ * still resume via `resumeUploadArchiveSession`. The caller is expected
+ * to invoke this before `initArchive` whenever the user is starting a
+ * fresh link attempt (not a resume).
+ *
+ * @param {{ baseUrl: string, rootPrivateKey: Uint8Array }} args
+ * @returns {Promise<number>} number of stale exports reclaimed
+ */
+export async function reclaimStaleExportArchives({ baseUrl, rootPrivateKey }) {
+  if (!(rootPrivateKey instanceof Uint8Array) || rootPrivateKey.byteLength === 0) {
+    return 0;
+  }
+  let rows;
+  try {
+    rows = await listExports();
+  } catch (err) {
+    console.warn('[linkArchive] reclaimStaleExportArchives: listExports failed', err);
+    return 0;
+  }
+  let reclaimed = 0;
+  const now = Date.now();
+  for (const row of rows) {
+    if (!row || !row.archiveId) continue;
+    if (baseUrl && row.baseUrl && row.baseUrl !== baseUrl) continue;
+    const isTerminal = row.status === EXPORT_STATUS_TERMINAL;
+    const isPastDeadline = row.hardDeadlineAt
+      && new Date(row.hardDeadlineAt).getTime() < now;
+    if (!isTerminal && !isPastDeadline) continue;
+    let uploadToken = null;
+    let downloadToken = null;
+    try {
+      if (row.uploadTokenWrapped) {
+        uploadToken = await unwrapUploadToken(rootPrivateKey, row.uploadTokenWrapped);
+      }
+      if (row.downloadTokenWrapped) {
+        downloadToken = await unwrapDownloadToken(rootPrivateKey, row.downloadTokenWrapped);
+      }
+    } catch (err) {
+      console.warn('[linkArchive] reclaimStaleExportArchives: token unwrap failed', err);
+    }
+    if (uploadToken || downloadToken) {
+      try {
+        await deleteArchive(row.archiveId, { uploadToken, downloadToken }, row.baseUrl || baseUrl);
+      } catch (err) {
+        // deleteArchive already swallows network errors; this catch
+        // covers programmer mistakes (bad URL etc.) so the loop never
+        // crashes the caller's fresh-attempt path.
+        console.warn('[linkArchive] reclaimStaleExportArchives: deleteArchive threw', err);
+      }
+    }
+    try { await deleteExport(row.archiveId); }
+    catch (err) { console.warn('[linkArchive] reclaimStaleExportArchives: deleteExport failed', err); }
+    reclaimed += 1;
+  }
+  return reclaimed;
+}
 
 /**
  * Bounded-concurrency map. Preserves index order of `tasks`.
@@ -161,15 +237,41 @@ export async function uploadArchiveSession({
 
   const totalBytes = ciphertexts.reduce((sum, c) => sum + c.byteLength, 0);
 
-  // 3. Init: server returns archive id, capability tokens, backend
+  // 3a. Reclaim any server-side archive a prior failed transfer left
+  // behind. Doing this before init means an immediate retry after a
+  // failure does not collide with the per-user concurrent quota — the
+  // server would otherwise hold the old slot open for up to 30 minutes
+  // and reject this init with HTTP 409 ("initArchive failed").
+  if (rootPrivateKey instanceof Uint8Array && rootPrivateKey.byteLength > 0) {
+    try {
+      await reclaimStaleExportArchives({ baseUrl, rootPrivateKey });
+    } catch (err) {
+      console.warn('[linkArchive] reclaimStaleExportArchives failed', err);
+    }
+  }
+
+  // 3b. Init: server returns archive id, capability tokens, backend
   // kind, and the first presigned-URL upload window.
-  const init = await initArchive(token, {
-    totalChunks: ciphertexts.length,
-    totalBytes,
-    chunkSize: LINK_ARCHIVE_CHUNK_SIZE,
-    manifestHash,
-    archiveSha256,
-  }, baseUrl);
+  let init;
+  try {
+    init = await initArchive(token, {
+      totalChunks: ciphertexts.length,
+      totalBytes,
+      chunkSize: LINK_ARCHIVE_CHUNK_SIZE,
+      manifestHash,
+      archiveSha256,
+    }, baseUrl);
+  } catch (err) {
+    if (err && err.status === 409) {
+      throw Object.assign(
+        new Error(
+          'A previous device-link transfer is still occupying the server slot. Wait a minute or close any other linking session, then try again.',
+        ),
+        { cause: err, status: 409 },
+      );
+    }
+    throw err;
+  }
 
   const backendKind = init.backendKind || 'postgres_bytea';
   const totalChunks = ciphertexts.length;

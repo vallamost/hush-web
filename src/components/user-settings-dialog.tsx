@@ -56,11 +56,9 @@ import {
   GLASS_INTENSITY_MAX,
   GLASS_INTENSITY_MIN,
   GLASS_INTENSITY_STEP,
-  isMaterialPickerSupported,
   normalizeGlassMaterialForCapabilities,
   snapGlassIntensity,
   type GlassCapabilities,
-  type GlassMaterial,
 } from "@/lib/appearancePreferences"
 import {
   bridgeCanSwitchGlassMaterial,
@@ -390,51 +388,6 @@ function GlassIntensitySlider({
   )
 }
 
-const MATERIAL_LABELS: Record<GlassMaterial, string> = {
-  auto: "Automatic",
-  sidebar: "Sidebar",
-  "under-window": "Under window",
-  menu: "Menu",
-  headerView: "Header",
-  mica: "Mica",
-  acrylic: "Acrylic",
-}
-
-function GlassMaterialPicker({
-  value,
-  disabled,
-  materials,
-  onChange,
-}: {
-  value: GlassMaterial
-  disabled: boolean
-  materials: readonly GlassMaterial[]
-  onChange: (value: GlassMaterial) => void
-}) {
-  return (
-    <Select
-      value={value}
-      onValueChange={(next) => onChange(next as GlassMaterial)}
-      disabled={disabled}
-    >
-      <SelectTrigger
-        aria-label="Glass material"
-        className="w-full max-w-xs"
-        disabled={disabled}
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {materials.map((material) => (
-          <SelectItem key={material} value={material}>
-            {MATERIAL_LABELS[material]}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  )
-}
-
 function formatVaultTimeoutValue(
   timeout: string | number | null | undefined
 ): VaultTimeoutValue {
@@ -523,13 +476,10 @@ function AppearancePanel() {
     }
   }, [desktopBridge])
 
-  const materialPickerSupported =
-    hasResolvedCapabilities && isMaterialPickerSupported(capabilities)
   const effectiveMaterial =
     hasResolvedCapabilities && capabilities
       ? normalizeGlassMaterialForCapabilities(glassMaterial, capabilities)
       : glassMaterial
-  const platform = desktopBridge?.platform ?? null
   const supportedMaterials = capabilities?.materials ?? []
 
   // If the persisted material is not in the host capability set (e.g.
@@ -549,17 +499,22 @@ function AppearancePanel() {
     setGlassMaterial,
   ])
 
+  // The Material picker is hidden from the UI for now (the user-facing
+  // labels would expose implementation-leaky NSVisualEffectView names),
+  // but the renderer still pushes the persisted value through IPC so
+  // the desktop main process gets a chance to honour the conservative
+  // platform default (`menu` on macOS, `mica` on Win11 22H2+).
   React.useEffect(() => {
     if (!bridgeCanSwitchGlassMaterial(desktopBridge)) return
-    if (!materialPickerSupported) return
+    if (!capabilities?.materialSwitchingSupported) return
     if (!supportedMaterials.includes(effectiveMaterial)) return
     void desktopBridge.setGlassMaterial(effectiveMaterial).catch((error) => {
       console.warn("Failed to apply desktop glass material", error)
     })
   }, [
+    capabilities,
     desktopBridge,
     effectiveMaterial,
-    materialPickerSupported,
     supportedMaterials,
   ])
 
@@ -643,39 +598,6 @@ function AppearancePanel() {
               />
             </Field>
 
-            {materialPickerSupported ? (
-              <Field
-                orientation="horizontal"
-                data-disabled={!glassEnabled ? true : undefined}
-              >
-                <FieldContent>
-                  <FieldTitle>Material</FieldTitle>
-                  <FieldDescription>
-                    {platform === "darwin"
-                      ? "Pick the macOS vibrancy material applied to the window."
-                      : "Pick the Windows 11 background material applied to the window."}
-                  </FieldDescription>
-                </FieldContent>
-                <GlassMaterialPicker
-                  value={effectiveMaterial}
-                  disabled={!glassEnabled}
-                  materials={supportedMaterials}
-                  onChange={setGlassMaterial}
-                />
-              </Field>
-            ) : capabilities?.unsupportedReason ? (
-              <Field orientation="horizontal" data-disabled>
-                <FieldContent>
-                  <FieldTitle>Material</FieldTitle>
-                  <FieldDescription>
-                    {capabilities.unsupportedReason ===
-                    "linux-no-native-material"
-                      ? "Linux desktops do not expose a native window material Hush can target safely."
-                      : "This Windows build does not support runtime material switching. Update to Windows 11 22H2 or newer to enable it."}
-                  </FieldDescription>
-                </FieldContent>
-              </Field>
-            ) : null}
           </FieldGroup>
         </div>
       </section>

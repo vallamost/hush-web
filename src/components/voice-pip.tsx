@@ -58,6 +58,7 @@ export function VoicePip({
         <Card
           role="region"
           aria-label="Voice connection"
+          data-slot="bottom-dock-panel"
           className="gap-0 rounded-lg border-transparent py-0 shadow-none ring-0"
         >
           <div className="flex items-center gap-2 px-2 pt-2 pb-1">

@@ -84,14 +84,14 @@ describe("appearancePreferences", () => {
         theme: "dark",
         glassEnabled: true,
       }).glassIntensity
-    ).toBe(50)
+    ).toBe(25)
   })
 
-  it("defaults new installs to dark theme with glass enabled at medium intensity", () => {
+  it("defaults new installs to dark theme + glass enabled at magnet point 2 (25)", () => {
     expect(normalizeAppearancePreferences(null)).toMatchObject({
       theme: "dark",
       glassEnabled: true,
-      glassIntensity: 50,
+      glassIntensity: 25,
       glassMaterial: "auto",
     })
   })

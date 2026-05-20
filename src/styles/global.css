@@ -174,6 +174,20 @@ html[data-desktop="win32"][data-glass="on"] [data-slot="channel-card"] {
     background-color: var(--desktop-chrome-bg) !important;
 }
 
+/* ── Native window material: Glass off ───────────────────────────────────
+   With glass disabled the authenticated shell paints with the opaque
+   sidebar token. The channel card, bottom-dock user menu, and voice
+   pip default to `bg-card`, which in the dark palette equals `--sidebar`
+   exactly and makes them disappear into the shell. Repaint those inner
+   panels with the `--secondary` token so they remain a distinct surface
+   from the rail without reintroducing the removed accent outlines. The
+   rule is scoped to desktop + `data-glass="off"` so the approved glass-on
+   look is untouched. */
+html[data-desktop][data-glass="off"] [data-slot="channel-card"],
+html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
+    background-color: var(--secondary) !important;
+}
+
 .hush-desktop-topbar {
     flex: 0 0 var(--desktop-topbar-h);
     height: var(--desktop-topbar-h);

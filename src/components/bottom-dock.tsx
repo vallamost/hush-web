@@ -31,7 +31,10 @@ export function BottomDock({
   return (
     <div className="flex w-full flex-col gap-1">
       {voice ? <VoicePip {...voice} /> : null}
-      <Card className="gap-0 rounded-lg border-transparent py-0 shadow-none ring-0">
+      <Card
+        data-slot="bottom-dock-panel"
+        className="gap-0 rounded-lg border-transparent py-0 shadow-none ring-0"
+      >
         <UserMenu
           user={user}
           onOpenSettings={onOpenUserSettings}
