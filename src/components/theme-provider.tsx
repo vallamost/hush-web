@@ -1,34 +1,41 @@
-/* eslint-disable react-refresh/only-export-components */
 import * as React from "react"
 
-type Theme = "dark" | "light" | "system"
-type ResolvedTheme = "dark" | "light"
+import {
+  APPEARANCE_STORAGE_KEY,
+  applyAppearancePreferences,
+  getSystemTheme,
+  normalizeAppearancePreferences,
+  readAppearancePreferences,
+  writeAppearancePreferences,
+  type AppearancePreferences,
+  type ResolvedTheme,
+  type ThemePreference,
+} from "@/lib/appearancePreferences"
 
 type ThemeProviderProps = {
   children: React.ReactNode
-  defaultTheme?: Theme
-  storageKey?: string
   disableTransitionOnChange?: boolean
 }
 
 type ThemeProviderState = {
-  theme: Theme
-  setTheme: (theme: Theme) => void
+  preferences: AppearancePreferences
+  theme: ThemePreference
+  resolvedTheme: ResolvedTheme
+  glassEnabled: boolean
+  glassOpacity: number
+  setTheme: (theme: ThemePreference) => void
+  setGlassEnabled: (enabled: boolean) => void
+  setGlassOpacity: (opacity: number) => void
+  setPreferences: (
+    next:
+      | AppearancePreferences
+      | ((current: AppearancePreferences) => AppearancePreferences)
+  ) => void
 }
-
-const THEME_VALUES: Theme[] = ["dark", "light", "system"]
 
 const ThemeProviderContext = React.createContext<
   ThemeProviderState | undefined
 >(undefined)
-
-function isTheme(value: string | null): value is Theme {
-  if (value === null) {
-    return false
-  }
-
-  return THEME_VALUES.includes(value as Theme)
-}
 
 function disableTransitionsTemporarily() {
   const style = document.createElement("style")
@@ -49,36 +56,53 @@ function disableTransitionsTemporarily() {
   }
 }
 
-// Theme is force-locked to "dark" until the design system has been
-// reviewed in light mode. The provider keeps its public API intact so
-// callers (palette, settings) compile, but every applyTheme call routes
-// to dark and the keyboard `D` toggle is intentionally inert. Stored
-// preference in localStorage is preserved so re-enabling later picks up
-// any prior user choice without a migration.
-const FORCED_THEME: ResolvedTheme = "dark"
-
 export function ThemeProvider({
   children,
-  defaultTheme: _defaultTheme = "system",
-  storageKey = "theme",
-  disableTransitionOnChange = true,
+  disableTransitionOnChange = false,
   ...props
 }: ThemeProviderProps) {
-  void _defaultTheme
-  const [theme, setThemeState] = React.useState<Theme>(() => {
-    const storedTheme = localStorage.getItem(storageKey)
-    if (isTheme(storedTheme)) {
-      return storedTheme
-    }
-    return FORCED_THEME
-  })
+  const [preferences, setPreferencesState] =
+    React.useState<AppearancePreferences>(() => readAppearancePreferences())
+  const [systemTheme, setSystemTheme] =
+    React.useState<ResolvedTheme>(() => getSystemTheme())
+  const hasAppliedPreferencesRef = React.useRef(false)
+
+  const setPreferences = React.useCallback(
+    (
+      next:
+        | AppearancePreferences
+        | ((current: AppearancePreferences) => AppearancePreferences)
+    ) => {
+      setPreferencesState((current) => {
+        const resolved =
+          typeof next === "function" ? next(current) : next
+        const normalized = normalizeAppearancePreferences(resolved)
+        writeAppearancePreferences(normalized)
+        return normalized
+      })
+    },
+    []
+  )
 
   const setTheme = React.useCallback(
-    (nextTheme: Theme) => {
-      localStorage.setItem(storageKey, nextTheme)
-      setThemeState(nextTheme)
+    (theme: ThemePreference) => {
+      setPreferences((current) => ({ ...current, theme }))
     },
-    [storageKey]
+    [setPreferences]
+  )
+
+  const setGlassEnabled = React.useCallback(
+    (glassEnabled: boolean) => {
+      setPreferences((current) => ({ ...current, glassEnabled }))
+    },
+    [setPreferences]
+  )
+
+  const setGlassOpacity = React.useCallback(
+    (glassOpacity: number) => {
+      setPreferences((current) => ({ ...current, glassOpacity }))
+    },
+    [setPreferences]
   )
 
   React.useEffect(() => {
@@ -86,40 +110,71 @@ export function ThemeProvider({
     const restoreTransitions = disableTransitionOnChange
       ? disableTransitionsTemporarily()
       : null
-    root.classList.remove("light", "dark")
-    root.classList.add(FORCED_THEME)
+    if (!disableTransitionOnChange && hasAppliedPreferencesRef.current) {
+      root.dataset.themeTransition = "on"
+    }
+    applyAppearancePreferences(preferences)
+    hasAppliedPreferencesRef.current = true
     if (restoreTransitions) {
       restoreTransitions()
     }
-  }, [disableTransitionOnChange])
+    if (root.dataset.themeTransition === "on") {
+      const timeout = window.setTimeout(() => {
+        delete root.dataset.themeTransition
+      }, 180)
+      return () => window.clearTimeout(timeout)
+    }
+    return undefined
+  }, [disableTransitionOnChange, preferences, systemTheme])
 
-  // Cross-tab sync stays wired so a user toggling theme in another tab
-  // updates this tab's stored preference, even though the resolved
-  // value still renders dark.
   React.useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
       if (event.storageArea !== localStorage) {
         return
       }
-      if (event.key !== storageKey) {
+      if (event.key !== APPEARANCE_STORAGE_KEY) {
         return
       }
-      if (isTheme(event.newValue)) {
-        setThemeState(event.newValue)
-      }
+      setPreferencesState(readAppearancePreferences())
     }
     window.addEventListener("storage", handleStorageChange)
     return () => {
       window.removeEventListener("storage", handleStorageChange)
     }
-  }, [storageKey])
+  }, [])
+
+  React.useEffect(() => {
+    if (typeof window.matchMedia !== "function") {
+      return undefined
+    }
+
+    const query = window.matchMedia("(prefers-color-scheme: dark)")
+    const handleChange = () => setSystemTheme(getSystemTheme())
+    query.addEventListener("change", handleChange)
+    return () => query.removeEventListener("change", handleChange)
+  }, [])
 
   const value = React.useMemo(
     () => ({
-      theme,
+      preferences,
+      theme: preferences.theme,
+      resolvedTheme:
+        preferences.theme === "system" ? systemTheme : preferences.theme,
+      glassEnabled: preferences.glassEnabled,
+      glassOpacity: preferences.glassOpacity,
       setTheme,
+      setGlassEnabled,
+      setGlassOpacity,
+      setPreferences,
     }),
-    [theme, setTheme]
+    [
+      preferences,
+      setGlassEnabled,
+      setGlassOpacity,
+      setPreferences,
+      setTheme,
+      systemTheme,
+    ]
   )
 
   return (
@@ -138,3 +193,9 @@ export const useTheme = () => {
 
   return context
 }
+
+export const useAppearancePreferences = useTheme
+
+export const useOptionalTheme = () => React.useContext(ThemeProviderContext)
+
+export type { AppearancePreferences, ThemePreference }

@@ -44,8 +44,19 @@ const LinkArchiveDescriptorSchema = z.object({
   archiveSha256: z.string().min(1),
   ephPub: z.string().min(1),
   nonceBase: z.string().min(1),
+  format: z.string().min(1).optional(),
+  chunkPlaintextHashes: z.array(z.string().min(1)).optional(),
   transcriptBlobOmitted: z.boolean(),
-}).strict();
+}).strict().refine(
+  (archive) => (
+    !archive.chunkPlaintextHashes
+    || archive.chunkPlaintextHashes.length === archive.totalChunks
+  ),
+  {
+    message: 'chunkPlaintextHashes length must match totalChunks.',
+    path: ['chunkPlaintextHashes'],
+  },
+);
 
 const TransferBundleSchema = z.object({
   v: z.number().int().positive().optional(),

@@ -57,11 +57,6 @@ vi.mock('./lib/slugify', () => ({
 
 vi.mock('./components/AppBackground', () => ({ default: () => null }));
 
-vi.mock('./lib/theme', () => ({
-  applyThemeMode: vi.fn(),
-  getStoredThemeMode: vi.fn().mockReturnValue('dark'),
-}));
-
 // Mock useSingleTab so we can control the blocked-tab state in App tests
 vi.mock('./hooks/useSingleTab', () => ({
   useSingleTab: vi.fn(() => ({ isBlockedTab: false, takeOver: vi.fn() })),

@@ -215,6 +215,8 @@ describe('transfer bundle serialisation', () => {
       archiveSha256: 'YXJjaGl2ZXNoYTI1Ng==',
       ephPub: 'ZXBocHViYnl0ZXM=',
       nonceBase: 'bm9uY2ViYXNl',
+      format: 'chunk-atomic-v1',
+      chunkPlaintextHashes: ['Y2h1bmstaGFzaC0x', 'Y2h1bmstaGFzaC0y'],
       transcriptBlobOmitted: false,
     };
     const bytes = await encodeTransferBundle({
@@ -300,6 +302,30 @@ describe('transfer bundle serialisation', () => {
       nonceBase: 'bm9uY2ViYXNl',
       transcriptBlobOmitted: false,
       [field]: value,
+    };
+    const badBytes = buildRawTransferBundle(identity, { archive });
+
+    await expect(decodeTransferBundle(badBytes)).rejects.toMatchObject({
+      code: 'invalid_device_link_payload',
+      message: expect.stringContaining('invalid shape'),
+    });
+  });
+
+  it('rejects archive descriptors whose chunk hash count does not match totalChunks', async () => {
+    const identity = await createDeviceIdentity();
+    const archive = {
+      id: 'arch-1',
+      downloadToken: 'dtok',
+      totalChunks: 2,
+      totalBytes: 8200,
+      chunkSize: 4096,
+      manifestHash: 'bWFuaWZlc3RoYXNo',
+      archiveSha256: 'YXJjaGl2ZXNoYTI1Ng==',
+      ephPub: 'ZXBocHViYnl0ZXM=',
+      nonceBase: 'bm9uY2ViYXNl',
+      format: 'chunk-atomic-v1',
+      chunkPlaintextHashes: ['Y2h1bmstaGFzaC0x'],
+      transcriptBlobOmitted: false,
     };
     const badBytes = buildRawTransferBundle(identity, { archive });
 

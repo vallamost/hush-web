@@ -17,12 +17,22 @@ import {
 
 import { Separator } from "@/components/ui/separator.tsx"
 import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldGroup,
+  FieldTitle,
+} from "@/components/ui/field"
+import { Slider } from "@/components/ui/slider"
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ConfirmAction } from "@/components/confirm-action"
 import { UsernameHandle } from "@/components/identity/username-handle"
 import {
@@ -37,6 +47,10 @@ import {
   VoiceVideoPanel,
   type VoiceRuntime,
 } from "@/components/settings/voice-video-panel"
+import {
+  useAppearancePreferences,
+  type ThemePreference,
+} from "@/components/theme-provider"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
 
 interface UserAccountInfo {
@@ -133,8 +147,7 @@ export function UserSettingsDialog({
       groupId: "app",
       label: "Appearance",
       icon: <PaletteIcon />,
-      disabled: true,
-      content: <PlaceholderPanel title="Appearance" />,
+      content: <AppearancePanel />,
     },
     {
       id: "voice",
@@ -285,6 +298,16 @@ const VAULT_TIMEOUT_OPTIONS: { value: VaultTimeoutValue; label: string }[] = [
 
 const LEGACY_VAULT_TIMEOUT_KEY = "hush_vault_timeout"
 
+const THEME_TABS: { value: ThemePreference; label: string }[] = [
+  { value: "system", label: "System" },
+  { value: "light", label: "Light" },
+  { value: "dark", label: "Dark" },
+]
+
+const GLASS_OPACITY_MIN = 40
+const GLASS_OPACITY_MAX = 100
+const GLASS_OPACITY_STEP = 5
+
 function formatVaultTimeoutValue(
   timeout: string | number | null | undefined
 ): VaultTimeoutValue {
@@ -325,6 +348,114 @@ function parseVaultTimeoutValue(
     case "4h":
       return 240
   }
+}
+
+function AppearancePanel() {
+  const {
+    theme,
+    glassEnabled,
+    glassOpacity,
+    setTheme,
+    setGlassEnabled,
+    setGlassOpacity,
+  } = useAppearancePreferences()
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-lg font-semibold">Appearance</h2>
+        <p className="text-sm text-muted-foreground">
+          Control the app theme and desktop window material.
+        </p>
+      </div>
+
+      <Separator />
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Theme
+        </h3>
+        <div className="rounded-lg border bg-card p-4">
+          <FieldGroup>
+            <Field>
+              <FieldContent>
+                <FieldTitle>Color mode</FieldTitle>
+                <FieldDescription>
+                  System follows the current operating system preference.
+                </FieldDescription>
+              </FieldContent>
+              <Tabs
+                value={theme}
+                onValueChange={(value) => setTheme(value as ThemePreference)}
+                className="w-full"
+              >
+                <TabsList className="grid w-full grid-cols-3">
+                  {THEME_TABS.map((item) => (
+                    <TabsTrigger key={item.value} value={item.value}>
+                      {item.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </Field>
+          </FieldGroup>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Desktop glass
+        </h3>
+        <div className="rounded-lg border bg-card p-4">
+          <FieldGroup>
+            <Field orientation="horizontal">
+              <FieldContent>
+                <FieldTitle>Glass effect</FieldTitle>
+                <FieldDescription>
+                  Use the native desktop material behind the server rail,
+                  channel list, and top bar.
+                </FieldDescription>
+              </FieldContent>
+              <Switch
+                aria-label="Enable glass effect"
+                checked={glassEnabled}
+                onCheckedChange={setGlassEnabled}
+              />
+            </Field>
+
+            <Field data-disabled={!glassEnabled ? true : undefined}>
+              <FieldContent>
+                <div className="flex items-center justify-between gap-3">
+                  <FieldTitle>Opacity</FieldTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {glassOpacity}%
+                  </span>
+                </div>
+                <FieldDescription>
+                  Higher values make the chrome more solid. Lower values reveal
+                  more of the native desktop material.
+                </FieldDescription>
+              </FieldContent>
+              <Slider
+                aria-label="Glass opacity"
+                disabled={!glassEnabled}
+                min={GLASS_OPACITY_MIN}
+                max={GLASS_OPACITY_MAX}
+                step={GLASS_OPACITY_STEP}
+                value={[glassOpacity]}
+                onValueChange={(value) => {
+                  const next = value[0]
+                  if (typeof next === "number") {
+                    setGlassOpacity(next)
+                  }
+                }}
+              />
+            </Field>
+          </FieldGroup>
+        </div>
+      </section>
+    </div>
+  )
 }
 
 function readStoredVaultTimeout(userId: string | undefined): VaultTimeoutValue {

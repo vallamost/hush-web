@@ -3,8 +3,6 @@ import {
   HashIcon,
   Volume2Icon,
   HomeIcon,
-  MoonIcon,
-  SunIcon,
   MicOffIcon,
   SettingsIcon,
   LogOutIcon,
@@ -48,11 +46,9 @@ interface CommandPaletteProps {
   servers: ServerEntry[]
   onJumpServer: (id: string) => void
   onJumpChannel: (channel: ChannelEntry) => void
-  onToggleTheme: () => void
   onToggleMute: () => void
   onGoHome: () => void
   onOpenCheatSheet: () => void
-  isDark: boolean
   onDiscoverServers?: () => void
   onCreateServer?: () => void
   /**
@@ -76,11 +72,9 @@ export function CommandPalette({
   servers,
   onJumpServer,
   onJumpChannel,
-  onToggleTheme,
   onToggleMute,
   onGoHome,
   onOpenCheatSheet,
-  isDark,
   onDiscoverServers,
   onCreateServer,
   onCreateChannel,
@@ -210,18 +204,6 @@ export function CommandPalette({
           <CommandSeparator />
 
           <CommandGroup heading="Preferenze">
-            {/* Theme toggle is intentionally inert until light mode
-                returns. Render disabled+muted so the affordance reads
-                as "shipping soon" without flipping the forced dark
-                root class. The keyboard `D` shortcut was removed for
-                the same reason. */}
-            <CommandItem disabled>
-              <MoonIcon />
-              <span>Theme</span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                Shipping soon
-              </span>
-            </CommandItem>
             <CommandItem onSelect={runAction(onToggleMute)}>
               <MicOffIcon />
               <span>Toggle mute</span>

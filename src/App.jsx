@@ -8,18 +8,11 @@ import { BlockedTabView } from './components/blocked-tab-view.tsx';
 import { DesktopShell } from './components/desktop/DesktopShell.jsx';
 import { DesktopUpdateBoundary } from './components/desktop/DesktopUpdateBoundary.jsx';
 import { DesktopWindowFloorSync } from './components/desktop/DesktopWindowFloorSync.jsx';
-import { applyThemeMode } from './lib/theme';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
 import { Toaster } from './components/ui/sonner';
 import { UpdateRequiredDialog } from './components/UpdateRequiredDialog';
-
-// Theme is force-locked to dark while light mode is being reviewed
-// (see theme-provider.tsx). Applying it pre-paint here prevents FOUC
-// on cold loads where the ThemeProvider effect hasn't mounted yet.
-applyThemeMode('dark');
-
 
 const UnauthenticatedShell = lazy(() =>
   import('./components/auth/unauthenticated-shell').then((m) => ({

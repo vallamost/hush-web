@@ -28,6 +28,7 @@
        topbar root to `var(--background)` so the bar fuses with their
        `bg-background` wrapper instead. */
     --desktop-topbar-bg: var(--desktop-chrome-bg);
+    --desktop-glass-opacity: 60%;
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -104,6 +105,18 @@ html[data-desktop] [data-slot="channel-sidebar"] {
     padding-top: 0 !important;
 }
 
+html[data-theme-transition="on"] * {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-duration: 140ms;
+    transition-timing-function: ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html[data-theme-transition="on"] * {
+        transition-duration: 0ms !important;
+    }
+}
+
 /* ── Native window material (desktop only) ───────────────────────────────
    Electron sets `vibrancy: 'sidebar'` on macOS and `backgroundMaterial:
    'mica'` on Win11 (see `hush-desktop/src/main/window-config.ts`). For
@@ -117,15 +130,15 @@ html[data-desktop] [data-slot="channel-sidebar"] {
      - the chat / content panes keep their solid `bg-card` /
        `bg-background` so message text stays fully opaque.
    Linux has no native material and keeps the solid sidebar background. */
-html[data-desktop="darwin"],
-html[data-desktop="win32"] {
-    --desktop-chrome-bg: color-mix(in oklch, var(--sidebar) 65%, transparent);
+html[data-desktop="darwin"][data-glass="on"],
+html[data-desktop="win32"][data-glass="on"] {
+    --desktop-chrome-bg: color-mix(in oklch, var(--sidebar) var(--desktop-glass-opacity), transparent);
 }
 
-html[data-desktop="darwin"],
-html[data-desktop="darwin"] body,
-html[data-desktop="win32"],
-html[data-desktop="win32"] body {
+html[data-desktop="darwin"][data-glass="on"],
+html[data-desktop="darwin"][data-glass="on"] body,
+html[data-desktop="win32"][data-glass="on"],
+html[data-desktop="win32"][data-glass="on"] body {
     background-color: transparent;
 }
 

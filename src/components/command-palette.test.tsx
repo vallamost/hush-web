@@ -1,6 +1,6 @@
 /**
- * Verifies CommandPalette routes onSelect actions: theme toggle, mute,
- * cheat sheet, sign out, settings, discover, and channel/server jump.
+ * Verifies CommandPalette routes onSelect actions: mute, cheat sheet,
+ * sign out, settings, discover, and channel/server jump.
  * Search results only appear once the user has typed.
  */
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
@@ -55,11 +55,9 @@ describe("CommandPalette", () => {
         servers={overrides.servers ?? SERVERS}
         onJumpServer={overrides.onJumpServer ?? vi.fn()}
         onJumpChannel={overrides.onJumpChannel ?? vi.fn()}
-        onToggleTheme={overrides.onToggleTheme ?? vi.fn()}
         onToggleMute={overrides.onToggleMute ?? vi.fn()}
         onGoHome={overrides.onGoHome ?? vi.fn()}
         onOpenCheatSheet={overrides.onOpenCheatSheet ?? vi.fn()}
-        isDark={overrides.isDark ?? false}
         onDiscoverServers={overrides.onDiscoverServers}
         onOpenSettings={overrides.onOpenSettings}
         onCheckForUpdates={overrides.onCheckForUpdates}
@@ -85,21 +83,6 @@ describe("CommandPalette", () => {
 
     expect(onGoHome).toHaveBeenCalledTimes(1)
     expect(onOpenChange).toHaveBeenCalledWith(false)
-  })
-
-  // Theme toggle is intentionally inert until light mode returns
-  // (force-dark policy in theme-provider). The palette renders a
-  // disabled "Theme — Shipping soon" item; cmdk filters it from the
-  // selectable list, so a click must NOT invoke the handler. The user
-  // can re-enable later by lifting the disabled state in
-  // command-palette.tsx and dropping the force-dark short-circuit.
-  it("does not invoke onToggleTheme while the theme item is disabled", async () => {
-    const onToggleTheme = vi.fn()
-    setup({ onToggleTheme })
-
-    const theme = screen.getByText(/^theme$/i).closest("[role='option']")
-    expect(theme).toHaveAttribute("data-disabled")
-    expect(onToggleTheme).not.toHaveBeenCalled()
   })
 
   it("invokes onSignOut from the preferences group", async () => {

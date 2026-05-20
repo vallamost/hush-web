@@ -7,6 +7,7 @@ import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { ThemeProvider } from "@/components/theme-provider"
 
 beforeAll(() => {
   if (!window.matchMedia) {
@@ -63,6 +64,10 @@ describe("UserSettingsDialog", () => {
     mockUseAuth.mockReset()
     mockGetVaultConfig.mockReset()
     localStorage.clear()
+    document.documentElement.classList.remove("light", "dark")
+    delete document.documentElement.dataset.theme
+    delete document.documentElement.dataset.glass
+    document.documentElement.style.removeProperty("--desktop-glass-opacity")
   })
 
   it("renders username + display name from the account prop", () => {
@@ -139,6 +144,45 @@ describe("UserSettingsDialog", () => {
     expect(
       screen.queryByRole("heading", { name: /^profile$/i })
     ).not.toBeInTheDocument()
+  })
+
+  it("enables Appearance theme and glass controls", async () => {
+    render(
+      <ThemeProvider disableTransitionOnChange={false}>
+        <UserSettingsDialog
+          open
+          onOpenChange={() => {}}
+          account={{ displayName: "Yarin", username: "yarin" }}
+        />
+      </ThemeProvider>
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^appearance$/i }))
+
+    expect(
+      screen.getByRole("heading", { name: /^appearance$/i })
+    ).toBeInTheDocument()
+    expect(screen.getByRole("tab", { name: /^system$/i })).toHaveAttribute(
+      "data-state",
+      "active"
+    )
+
+    await u.click(screen.getByRole("tab", { name: /^light$/i }))
+    expect(document.documentElement).toHaveClass("light")
+
+    const glassSwitch = screen.getByRole("switch", {
+      name: /enable glass effect/i,
+    })
+    expect(glassSwitch).toBeChecked()
+    expect(screen.getByRole("slider", { name: /glass opacity/i })).toBeEnabled()
+
+    await u.click(glassSwitch)
+    expect(document.documentElement.dataset.glass).toBe("off")
+    expect(screen.getByRole("slider", { name: /glass opacity/i })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    )
   })
 
   it("invokes onSignOut after the destructive confirm", async () => {

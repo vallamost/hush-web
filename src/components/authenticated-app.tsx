@@ -877,7 +877,6 @@ export function AuthenticatedApp() {
     () => new Set(favorites.map((f) => f.messageId)),
     [favorites]
   )
-  const [isDark, setIsDark] = React.useState(false)
 
   const railEntries = React.useMemo(
     () => [{ id: "home", name: "Home", initials: "HO" }, ...servers],
@@ -1241,14 +1240,6 @@ export function AuthenticatedApp() {
     },
     [navigateToServer, servers]
   )
-
-  const handleToggleTheme = React.useCallback(() => {
-    setIsDark((prev) => {
-      const next = !prev
-      document.documentElement.classList.toggle("dark", next)
-      return next
-    })
-  }, [])
 
   // Keyboard shortcuts
   React.useEffect(() => {
@@ -1749,11 +1740,9 @@ export function AuthenticatedApp() {
           const server = servers.find((s) => s.id === channel.serverId)
           if (server) navigateToServer(server, channel.id)
         }}
-        onToggleTheme={handleToggleTheme}
         onToggleMute={handleToggleMute}
         onGoHome={() => navigate("/home")}
         onOpenCheatSheet={() => setIsCheatSheetOpen(true)}
-        isDark={isDark}
         onDiscoverServers={() => navigate("/explore")}
         onCreateServer={openCreateServerDialog}
         onCreateChannel={

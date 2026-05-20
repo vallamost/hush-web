@@ -94,9 +94,8 @@ function buildSections(modKey: string, altKey: string): ShortcutSection[] {
     {
       id: "misc",
       title: "Misc",
-      description: "Theme, settings, this sheet",
+      description: "Settings and this sheet",
       entries: [
-        { keys: ["D"], label: "Toggle dark / light theme" },
         { keys: [modKey, "/"], label: "Open this cheat sheet" },
       ],
     },
