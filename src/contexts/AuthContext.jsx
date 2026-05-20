@@ -19,3 +19,12 @@ export function useAuth() {
   }
   return ctx;
 }
+
+/**
+ * Non-throwing variant for shell components (for example the global
+ * bug-report button) that mount inside views both with and without an
+ * AuthProvider wrapper. Returns `null` when the provider is absent.
+ */
+export function useOptionalAuth() {
+  return useContext(AuthContext);
+}

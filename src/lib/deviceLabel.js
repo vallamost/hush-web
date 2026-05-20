@@ -5,15 +5,35 @@
  *   - Chrome on macOS
  *   - Safari on iPhone
  *   - Firefox on Windows
+ *   - Desktop on macOS  (packaged Electron client)
+ *
+ * The Electron packaged app is distinguished from a regular browser via
+ * two complementary signals: the desktop preload bridge
+ * (`window.hushDesktop`) when invoked from the renderer, and the
+ * `Electron/` token in the user-agent string when the function is
+ * called with an explicit `userAgentOverride`.
  *
  * @param {string|null} userAgentOverride
  * @returns {string}
  */
 export function getReadableDeviceLabel(userAgentOverride = null) {
   const userAgent = resolveUserAgent(userAgentOverride);
-  const browser = detectBrowserName(userAgent);
   const platform = detectPlatformName(userAgent);
+  if (isPackagedDesktopRuntime(userAgent, userAgentOverride)) {
+    return `Desktop on ${platform}`;
+  }
+  const browser = detectBrowserName(userAgent);
   return `${browser} on ${platform}`;
+}
+
+function isPackagedDesktopRuntime(userAgent, userAgentOverride) {
+  if (userAgentOverride == null) {
+    if (typeof window !== 'undefined') {
+      const bridge = window.hushDesktop;
+      if (bridge && bridge.isDesktop === true) return true;
+    }
+  }
+  return /Electron\//.test(userAgent);
 }
 
 function resolveUserAgent(userAgentOverride) {

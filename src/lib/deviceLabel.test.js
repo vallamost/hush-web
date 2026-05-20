@@ -37,4 +37,17 @@ describe('getReadableDeviceLabel', () => {
   it('falls back to a generic device label when the user agent is unknown', () => {
     expect(getReadableDeviceLabel('CustomAgent/1.0')).toBe('Browser on device');
   });
+
+  it('distinguishes the packaged desktop client via the Electron UA token', () => {
+    expect(
+      getReadableDeviceLabel(
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Hush/0.1.30-mvp Chrome/132.0.0.0 Electron/34.0.0 Safari/537.36',
+      ),
+    ).toBe('Desktop on macOS');
+    expect(
+      getReadableDeviceLabel(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/132.0.0.0 Electron/34.0.0 Safari/537.36',
+      ),
+    ).toBe('Desktop on Windows');
+  });
 });

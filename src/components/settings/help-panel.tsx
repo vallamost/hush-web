@@ -11,20 +11,7 @@ import {
 } from "@/components/ui/field"
 import { Separator } from "@/components/ui/separator"
 import { useAuth } from "@/contexts/AuthContext"
-import type { BugReportLifecycleState } from "@/lib/bugReport"
-
-function deriveLifecycleStateFromAuth(auth: unknown): BugReportLifecycleState {
-  if (!auth || typeof auth !== "object") return "unknown"
-
-  const record = auth as { vaultState?: unknown; token?: unknown }
-  const vaultState =
-    typeof record.vaultState === "string" ? record.vaultState : null
-
-  if (vaultState === "unlocked") return "authorized"
-  if (vaultState === "locked") return "locked"
-  if (vaultState === "none") return "anonymous"
-  return "unknown"
-}
+import { deriveLifecycleStateFromAuth } from "@/lib/bugReportLifecycle"
 
 export function HelpPanel() {
   const auth = useAuth()
