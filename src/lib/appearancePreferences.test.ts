@@ -1,13 +1,44 @@
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
+  NO_GLASS_SUPPORT,
   applyAppearancePreferences,
-  getSupportedGlassMaterials,
+  isMaterialPickerSupported,
   mapGlassIntensityToSurfaceAlpha,
   mapGlassIntensityToTintPercent,
   normalizeAppearancePreferences,
+  normalizeGlassMaterialForCapabilities,
   snapGlassIntensity,
+  type GlassCapabilities,
 } from "./appearancePreferences"
+
+const darwinCapabilities: GlassCapabilities = {
+  platform: "darwin",
+  materialSwitchingSupported: true,
+  materials: ["auto", "sidebar", "under-window", "menu", "headerView"],
+  unsupportedReason: null,
+}
+
+const win22h2Capabilities: GlassCapabilities = {
+  platform: "win32",
+  materialSwitchingSupported: true,
+  materials: ["auto", "mica", "acrylic"],
+  unsupportedReason: null,
+}
+
+const win10Capabilities: GlassCapabilities = {
+  platform: "win32",
+  materialSwitchingSupported: false,
+  materials: [],
+  unsupportedReason: "win32-pre-22h2",
+}
+
+const linuxCapabilities: GlassCapabilities = {
+  platform: "linux",
+  materialSwitchingSupported: false,
+  materials: [],
+  unsupportedReason: "linux-no-native-material",
+}
 
 describe("appearancePreferences", () => {
   afterEach(() => {
@@ -97,20 +128,40 @@ describe("appearancePreferences", () => {
     expect(result.glassMaterial).toBe("auto")
   })
 
-  it("only advertises platform-supported glass materials", () => {
-    expect(getSupportedGlassMaterials("darwin")).toEqual([
-      "auto",
-      "sidebar",
-      "under-window",
-      "menu",
-      "headerView",
-    ])
-    expect(getSupportedGlassMaterials("win32")).toEqual([
-      "auto",
-      "mica",
-      "acrylic",
-    ])
-    expect(getSupportedGlassMaterials("linux")).toEqual([])
-    expect(getSupportedGlassMaterials(null)).toEqual([])
+  it("opens the picker only when the host advertises a non-auto material", () => {
+    expect(isMaterialPickerSupported(darwinCapabilities)).toBe(true)
+    expect(isMaterialPickerSupported(win22h2Capabilities)).toBe(true)
+    expect(isMaterialPickerSupported(win10Capabilities)).toBe(false)
+    expect(isMaterialPickerSupported(linuxCapabilities)).toBe(false)
+    expect(isMaterialPickerSupported(NO_GLASS_SUPPORT)).toBe(false)
+    expect(isMaterialPickerSupported(null)).toBe(false)
+  })
+
+  it("falls back to auto when material switching is unsupported", () => {
+    expect(
+      normalizeGlassMaterialForCapabilities("mica", linuxCapabilities)
+    ).toBe("auto")
+    expect(
+      normalizeGlassMaterialForCapabilities("sidebar", win10Capabilities)
+    ).toBe("auto")
+    expect(normalizeGlassMaterialForCapabilities("sidebar", null)).toBe("auto")
+  })
+
+  it("collapses stale cross-platform stored materials onto auto", () => {
+    expect(
+      normalizeGlassMaterialForCapabilities("mica", darwinCapabilities)
+    ).toBe("auto")
+    expect(
+      normalizeGlassMaterialForCapabilities("sidebar", win22h2Capabilities)
+    ).toBe("auto")
+  })
+
+  it("keeps a supported material untouched", () => {
+    expect(
+      normalizeGlassMaterialForCapabilities("under-window", darwinCapabilities)
+    ).toBe("under-window")
+    expect(
+      normalizeGlassMaterialForCapabilities("acrylic", win22h2Capabilities)
+    ).toBe("acrylic")
   })
 })

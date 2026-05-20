@@ -56,11 +56,16 @@ import {
   GLASS_INTENSITY_MAX,
   GLASS_INTENSITY_MIN,
   GLASS_INTENSITY_STEP,
-  getSupportedGlassMaterials,
+  isMaterialPickerSupported,
+  normalizeGlassMaterialForCapabilities,
   snapGlassIntensity,
+  type GlassCapabilities,
   type GlassMaterial,
 } from "@/lib/appearancePreferences"
-import { getDesktopBridge } from "@/lib/desktopBridge"
+import {
+  bridgeCanSwitchGlassMaterial,
+  getDesktopBridge,
+} from "@/lib/desktopBridge"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
 
 interface UserAccountInfo {
@@ -485,20 +490,63 @@ function AppearancePanel() {
   } = useAppearancePreferences()
 
   const desktopBridge = React.useMemo(() => getDesktopBridge(), [])
-  const supportedMaterials = React.useMemo(
-    () => getSupportedGlassMaterials(desktopBridge?.platform ?? null),
-    [desktopBridge]
+  const [capabilities, setCapabilities] = React.useState<GlassCapabilities | null>(
+    null
   )
-  const materialPickerSupported = supportedMaterials.length > 0
-  const platform = desktopBridge?.platform ?? null
 
   React.useEffect(() => {
-    if (!desktopBridge) return
-    if (typeof desktopBridge.setGlassMaterial !== "function") return
-    void desktopBridge.setGlassMaterial(glassMaterial).catch((error) => {
+    if (!bridgeCanSwitchGlassMaterial(desktopBridge)) {
+      setCapabilities(null)
+      return
+    }
+    let cancelled = false
+    void desktopBridge
+      .getGlassCapabilities()
+      .then((result) => {
+        if (!cancelled) setCapabilities(result)
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("Failed to read desktop glass capabilities", error)
+          setCapabilities(null)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [desktopBridge])
+
+  const materialPickerSupported = isMaterialPickerSupported(capabilities)
+  const effectiveMaterial = normalizeGlassMaterialForCapabilities(
+    glassMaterial,
+    capabilities
+  )
+  const platform = desktopBridge?.platform ?? null
+  const supportedMaterials = capabilities?.materials ?? []
+
+  // If the persisted material is not in the host capability set (e.g.
+  // a Windows-only `mica` value loaded after switching to macOS), heal
+  // the stored preference so the renderer never carries a value it
+  // cannot send. The IPC effect below depends on this.
+  React.useEffect(() => {
+    if (effectiveMaterial !== glassMaterial) {
+      setGlassMaterial(effectiveMaterial)
+    }
+  }, [effectiveMaterial, glassMaterial, setGlassMaterial])
+
+  React.useEffect(() => {
+    if (!bridgeCanSwitchGlassMaterial(desktopBridge)) return
+    if (!materialPickerSupported) return
+    if (!supportedMaterials.includes(effectiveMaterial)) return
+    void desktopBridge.setGlassMaterial(effectiveMaterial).catch((error) => {
       console.warn("Failed to apply desktop glass material", error)
     })
-  }, [desktopBridge, glassMaterial])
+  }, [
+    desktopBridge,
+    effectiveMaterial,
+    materialPickerSupported,
+    supportedMaterials,
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -590,23 +638,25 @@ function AppearancePanel() {
                   <FieldDescription>
                     {platform === "darwin"
                       ? "Pick the macOS vibrancy material applied to the window."
-                      : "Pick the Windows 11 background material applied to the window. Older builds keep the conservative default."}
+                      : "Pick the Windows 11 background material applied to the window."}
                   </FieldDescription>
                 </FieldContent>
                 <GlassMaterialPicker
-                  value={glassMaterial}
+                  value={effectiveMaterial}
                   disabled={!glassEnabled}
                   materials={supportedMaterials}
                   onChange={setGlassMaterial}
                 />
               </Field>
-            ) : platform === "linux" ? (
+            ) : capabilities?.unsupportedReason ? (
               <Field orientation="horizontal" data-disabled>
                 <FieldContent>
                   <FieldTitle>Material</FieldTitle>
                   <FieldDescription>
-                    Linux desktops do not expose a native window material
-                    Hush can target safely.
+                    {capabilities.unsupportedReason ===
+                    "linux-no-native-material"
+                      ? "Linux desktops do not expose a native window material Hush can target safely."
+                      : "This Windows build does not support runtime material switching. Update to Windows 11 22H2 or newer to enable it."}
                   </FieldDescription>
                 </FieldContent>
               </Field>
