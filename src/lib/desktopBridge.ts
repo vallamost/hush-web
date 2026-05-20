@@ -34,9 +34,9 @@ export function getDesktopBridge(): DesktopBridge | null {
 
 /**
  * Returns whether the bridge can both fetch glass capabilities and apply
- * a chosen material at runtime. The Material picker uses this gate so a
- * desktop release older than the web release (where one of the methods
- * is missing) cannot render an inert picker.
+ * a chosen material at runtime. The appearance panel uses this gate so
+ * a desktop release older than the web release (where one of the
+ * methods is missing) cannot receive unsupported material IPC calls.
  */
 export function bridgeCanSwitchGlassMaterial(
   bridge: DesktopBridge | null

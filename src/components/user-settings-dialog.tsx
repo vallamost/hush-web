@@ -499,11 +499,12 @@ function AppearancePanel() {
     setGlassMaterial,
   ])
 
-  // The Material picker is hidden from the UI for now (the user-facing
-  // labels would expose implementation-leaky NSVisualEffectView names),
-  // but the renderer still pushes the persisted value through IPC so
-  // the desktop main process gets a chance to honour the conservative
-  // platform default (`menu` on macOS, `mica` on Win11 22H2+).
+  // Native material selection is hidden from the UI for now (the
+  // user-facing labels would expose implementation-leaky
+  // NSVisualEffectView names), but the renderer still pushes the
+  // persisted value through IPC so the desktop main process gets a
+  // chance to honour the conservative platform default (`menu` on
+  // macOS, `mica` on Win11 22H2+).
   React.useEffect(() => {
     if (!bridgeCanSwitchGlassMaterial(desktopBridge)) return
     if (!capabilities?.materialSwitchingSupported) return

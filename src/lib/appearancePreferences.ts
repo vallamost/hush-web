@@ -41,8 +41,8 @@ export interface AppearancePreferences {
   /**
    * Native window material identifier the renderer asks the desktop main
    * process to apply. Defaulted to `"auto"` so the main process keeps
-   * shipping its conservative platform pick (sidebar on macOS, mica on
-   * Win11) unless the user has explicitly chosen otherwise.
+   * shipping its conservative platform pick (menu on macOS, mica on
+   * Win11) unless a legacy persisted preference says otherwise.
    */
   glassMaterial: GlassMaterial
 }
@@ -317,11 +317,6 @@ export function applyStoredAppearancePreferences(): AppearancePreferences {
 }
 
 /**
- * Returns the list of glass materials the current platform supports. Used
- * by the settings UI to gate the material picker. Web (browser) builds
- * report an empty list because there is no native material to switch.
- */
-/**
  * Local mirror of the subset of `NodeJS.Platform` we care about. Kept
  * here so the renderer does not need to pull `@types/node` into the
  * web build only for a single string union.
@@ -349,8 +344,9 @@ export interface GlassCapabilities {
 
 /**
  * Capability payload used when no desktop bridge is reachable. Materials
- * are empty so the picker stays hidden; the renderer still treats the
- * Intensity slider as fully functional because it only drives CSS.
+ * are empty because browser builds cannot apply a native window
+ * material; the renderer still treats the Intensity slider as fully
+ * functional because it only drives CSS.
  */
 export const NO_GLASS_SUPPORT: GlassCapabilities = {
   platform: "web",
@@ -360,24 +356,11 @@ export const NO_GLASS_SUPPORT: GlassCapabilities = {
 }
 
 /**
- * Returns whether the renderer should expose a Material picker for a
- * given capability payload. Centralized here so the settings UI, the
- * IPC effect, and the tests all agree on the gating contract.
- */
-export function isMaterialPickerSupported(
-  capabilities: GlassCapabilities | null
-): boolean {
-  if (!capabilities) return false
-  if (!capabilities.materialSwitchingSupported) return false
-  return capabilities.materials.some((value) => value !== "auto")
-}
-
-/**
  * Normalizes a stored or user-provided material against the host
  * capability set. Stale cross-platform values (e.g. `mica` loaded on
- * macOS after a profile sync) collapse to `auto` so the rendered Select
- * never advertises a value that is not in its item list and the IPC
- * layer never receives a material the host cannot honour.
+ * macOS after a profile sync) collapse to `auto` so the IPC layer never
+ * receives a material the host cannot honour. The Material UI is hidden
+ * today, but old persisted preferences can still exist.
  */
 export function normalizeGlassMaterialForCapabilities(
   material: GlassMaterial,

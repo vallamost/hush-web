@@ -3,7 +3,6 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   NO_GLASS_SUPPORT,
   applyAppearancePreferences,
-  isMaterialPickerSupported,
   mapGlassIntensityToSurfaceAlpha,
   mapGlassIntensityToTintPercent,
   normalizeAppearancePreferences,
@@ -135,15 +134,6 @@ describe("appearancePreferences", () => {
       glassMaterial: "obviously-fake" as never,
     })
     expect(result.glassMaterial).toBe("auto")
-  })
-
-  it("opens the picker only when the host advertises a non-auto material", () => {
-    expect(isMaterialPickerSupported(darwinCapabilities)).toBe(true)
-    expect(isMaterialPickerSupported(win22h2Capabilities)).toBe(true)
-    expect(isMaterialPickerSupported(win10Capabilities)).toBe(false)
-    expect(isMaterialPickerSupported(linuxCapabilities)).toBe(false)
-    expect(isMaterialPickerSupported(NO_GLASS_SUPPORT)).toBe(false)
-    expect(isMaterialPickerSupported(null)).toBe(false)
   })
 
   it("falls back to auto when material switching is unsupported", () => {
