@@ -347,7 +347,7 @@ function GlassControlSlider({
         onValueChange={(values) => {
           const next = values[0]
           if (typeof next === "number") {
-            onChange(next)
+            onChange(snapGlassControlValue(next))
           }
         }}
         onValueCommit={commitValue}
@@ -487,19 +487,14 @@ function AppearancePanel() {
 
             <Field data-disabled={!glassEnabled ? true : undefined}>
               <FieldContent>
-                <div className="flex items-center justify-between gap-3">
-                  <FieldTitle>Opacity</FieldTitle>
-                  <span className="text-xs text-muted-foreground">
-                    {glassOpacity}%
-                  </span>
-                </div>
+                <FieldTitle>Tint</FieldTitle>
                 <FieldDescription>
-                  Controls the strength of the Hush tint over the native
+                  Controls the darkness of the Hush tint over the native
                   desktop material.
                 </FieldDescription>
               </FieldContent>
               <GlassControlSlider
-                label="Glass opacity"
+                label="Glass tint"
                 disabled={!glassEnabled}
                 value={glassOpacity}
                 onChange={setGlassOpacity}
@@ -508,14 +503,9 @@ function AppearancePanel() {
 
             <Field data-disabled={!glassEnabled ? true : undefined}>
               <FieldContent>
-                <div className="flex items-center justify-between gap-3">
-                  <FieldTitle>Transparency</FieldTitle>
-                  <span className="text-xs text-muted-foreground">
-                    {glassTransparency}%
-                  </span>
-                </div>
+                <FieldTitle>Transparency</FieldTitle>
                 <FieldDescription>
-                  Controls how clearly the native desktop material shows
+                  Controls how much of the native desktop material shows
                   through the chrome.
                 </FieldDescription>
               </FieldContent>

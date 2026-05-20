@@ -178,14 +178,14 @@ describe("UserSettingsDialog", () => {
       name: /enable glass effect/i,
     })
     expect(glassSwitch).toBeChecked()
-    expect(screen.getByRole("slider", { name: /glass opacity/i })).toBeEnabled()
+    expect(screen.getByRole("slider", { name: /glass tint/i })).toBeEnabled()
     expect(
       screen.getByRole("slider", { name: /glass transparency/i })
     ).toBeEnabled()
 
     await u.click(glassSwitch)
     expect(document.documentElement.dataset.glass).toBe("off")
-    expect(screen.getByRole("slider", { name: /glass opacity/i })).toHaveAttribute(
+    expect(screen.getByRole("slider", { name: /glass tint/i })).toHaveAttribute(
       "aria-disabled",
       "true"
     )

@@ -31,7 +31,7 @@
     --desktop-glass-opacity: 56%;
     --desktop-glass-tint-strength: 56%;
     --desktop-glass-transparency: 50%;
-    --desktop-glass-alpha: 50%;
+    --desktop-glass-alpha: 40%;
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -128,8 +128,8 @@ html[data-theme-transition="on"] * {
      - root background is fully transparent,
      - the authenticated chrome surfaces (server rail, channel-sidebar
        inner card, topbar) use a translucent tint over the OS material.
-       `Opacity` controls tint strength; `Transparency` controls how
-       much of the native material shows through.
+       `Tint` controls surface color strength; `Transparency` controls
+       the surface alpha, reaching a fully transparent chrome at 100%.
      - the chat / content panes keep their solid `bg-card` /
        `bg-background` so message text stays fully opaque.
    Linux has no native material and keeps the solid sidebar background. */

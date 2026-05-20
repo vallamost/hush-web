@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   applyAppearancePreferences,
   mapGlassControlToCssPercent,
+  mapGlassTransparencyToSurfaceAlpha,
   normalizeAppearancePreferences,
   snapGlassControlValue,
 } from "./appearancePreferences"
@@ -24,9 +25,16 @@ describe("appearancePreferences", () => {
     expect(mapGlassControlToCssPercent(100)).toBe(80)
   })
 
+  it("maps glass transparency to inverse surface alpha", () => {
+    expect(mapGlassTransparencyToSurfaceAlpha(0)).toBe(80)
+    expect(mapGlassTransparencyToSurfaceAlpha(50)).toBe(40)
+    expect(mapGlassTransparencyToSurfaceAlpha(100)).toBe(0)
+  })
+
   it("snaps glass controls only near magnetic points", () => {
-    expect(snapGlassControlValue(23)).toBe(25)
-    expect(snapGlassControlValue(27)).toBe(25)
+    expect(snapGlassControlValue(24)).toBe(25)
+    expect(snapGlassControlValue(26)).toBe(25)
+    expect(snapGlassControlValue(23)).toBe(23)
     expect(snapGlassControlValue(30)).toBe(30)
   })
 
@@ -61,6 +69,19 @@ describe("appearancePreferences", () => {
     ).toBe("50%")
     expect(
       document.documentElement.style.getPropertyValue("--desktop-glass-alpha")
-    ).toBe("50%")
+    ).toBe("40%")
+  })
+
+  it("makes maximum glass transparency fully transparent", () => {
+    applyAppearancePreferences({
+      theme: "dark",
+      glassEnabled: true,
+      glassOpacity: 60,
+      glassTransparency: 100,
+    })
+
+    expect(
+      document.documentElement.style.getPropertyValue("--desktop-glass-alpha")
+    ).toBe("0%")
   })
 })

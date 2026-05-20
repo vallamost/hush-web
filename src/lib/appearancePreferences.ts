@@ -16,11 +16,12 @@ export const GLASS_CONTROL_MAX = 100
 export const GLASS_CONTROL_STEP = 1
 export const GLASS_CONTROL_MAGNET_POINTS = [0, 25, 50, 75, 100] as const
 
-const GLASS_CSS_MIN = 20
-const GLASS_CSS_MAX = 80
+const GLASS_TINT_CSS_MIN = 20
+const GLASS_TINT_CSS_MAX = 80
+const GLASS_MAX_SURFACE_ALPHA = 80
 const GLASS_CONTROL_DEFAULT_OPACITY = 60
 const GLASS_CONTROL_DEFAULT_TRANSPARENCY = 50
-const GLASS_MAGNET_THRESHOLD = 2
+const GLASS_MAGNET_THRESHOLD = 1
 
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: "system",
@@ -56,7 +57,16 @@ export function snapGlassControlValue(value: number): number {
 export function mapGlassControlToCssPercent(value: number): number {
   const clamped = clampGlassControl(value, GLASS_CONTROL_DEFAULT_OPACITY)
   const ratio = clamped / GLASS_CONTROL_MAX
-  return GLASS_CSS_MIN + Math.round((GLASS_CSS_MAX - GLASS_CSS_MIN) * ratio)
+  return (
+    GLASS_TINT_CSS_MIN +
+    Math.round((GLASS_TINT_CSS_MAX - GLASS_TINT_CSS_MIN) * ratio)
+  )
+}
+
+export function mapGlassTransparencyToSurfaceAlpha(value: number): number {
+  const clamped = clampGlassControl(value, GLASS_CONTROL_DEFAULT_TRANSPARENCY)
+  const transparencyRatio = clamped / GLASS_CONTROL_MAX
+  return Math.round(GLASS_MAX_SURFACE_ALPHA * (1 - transparencyRatio))
 }
 
 function getLocalStorage(): Storage | null {
@@ -163,11 +173,16 @@ export function applyAppearancePreferences(
   root.classList.add(resolvedTheme)
   root.dataset.glass = normalized.glassEnabled ? "on" : "off"
   const tintStrength = mapGlassControlToCssPercent(normalized.glassOpacity)
-  const transparency = mapGlassControlToCssPercent(normalized.glassTransparency)
+  const surfaceAlpha = mapGlassTransparencyToSurfaceAlpha(
+    normalized.glassTransparency
+  )
   root.style.setProperty("--desktop-glass-opacity", `${tintStrength}%`)
   root.style.setProperty("--desktop-glass-tint-strength", `${tintStrength}%`)
-  root.style.setProperty("--desktop-glass-transparency", `${transparency}%`)
-  root.style.setProperty("--desktop-glass-alpha", `${100 - transparency}%`)
+  root.style.setProperty(
+    "--desktop-glass-transparency",
+    `${normalized.glassTransparency}%`
+  )
+  root.style.setProperty("--desktop-glass-alpha", `${surfaceAlpha}%`)
 }
 
 export function applyStoredAppearancePreferences(): AppearancePreferences {
