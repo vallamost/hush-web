@@ -69,6 +69,14 @@ function main() {
     )
   }
 
+  const changedCodeFiles = changedFiles.filter((file) => CODE_FILE_PATTERN.test(file))
+  if (changedCodeFiles.length === 0) {
+    console.log(
+      `Code size guard skipped: ${changedFiles.length}/${maxFiles} changed files, no code files changed.`
+    )
+    return
+  }
+
   const violations = []
   for (const file of listTrackedCodeFiles()) {
     if (!fs.existsSync(path.resolve(file))) continue
