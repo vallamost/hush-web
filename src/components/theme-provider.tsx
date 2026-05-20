@@ -23,9 +23,11 @@ type ThemeProviderState = {
   resolvedTheme: ResolvedTheme
   glassEnabled: boolean
   glassOpacity: number
+  glassTransparency: number
   setTheme: (theme: ThemePreference) => void
   setGlassEnabled: (enabled: boolean) => void
   setGlassOpacity: (opacity: number) => void
+  setGlassTransparency: (transparency: number) => void
   setPreferences: (
     next:
       | AppearancePreferences
@@ -105,6 +107,13 @@ export function ThemeProvider({
     [setPreferences]
   )
 
+  const setGlassTransparency = React.useCallback(
+    (glassTransparency: number) => {
+      setPreferences((current) => ({ ...current, glassTransparency }))
+    },
+    [setPreferences]
+  )
+
   React.useEffect(() => {
     const root = document.documentElement
     const restoreTransitions = disableTransitionOnChange
@@ -162,15 +171,18 @@ export function ThemeProvider({
         preferences.theme === "system" ? systemTheme : preferences.theme,
       glassEnabled: preferences.glassEnabled,
       glassOpacity: preferences.glassOpacity,
+      glassTransparency: preferences.glassTransparency,
       setTheme,
       setGlassEnabled,
       setGlassOpacity,
+      setGlassTransparency,
       setPreferences,
     }),
     [
       preferences,
       setGlassEnabled,
       setGlassOpacity,
+      setGlassTransparency,
       setPreferences,
       setTheme,
       systemTheme,

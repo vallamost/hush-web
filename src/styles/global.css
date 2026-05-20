@@ -28,7 +28,10 @@
        topbar root to `var(--background)` so the bar fuses with their
        `bg-background` wrapper instead. */
     --desktop-topbar-bg: var(--desktop-chrome-bg);
-    --desktop-glass-opacity: 60%;
+    --desktop-glass-opacity: 56%;
+    --desktop-glass-tint-strength: 56%;
+    --desktop-glass-transparency: 50%;
+    --desktop-glass-alpha: 50%;
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -124,15 +127,16 @@ html[data-theme-transition="on"] * {
    color on top of the same area, so for those platforms only:
      - root background is fully transparent,
      - the authenticated chrome surfaces (server rail, channel-sidebar
-       inner card, topbar) use a translucent mix of the sidebar tint so
-       the Hush palette still dominates while the OS material bleeds
-       through subtly,
+       inner card, topbar) use a translucent tint over the OS material.
+       `Opacity` controls tint strength; `Transparency` controls how
+       much of the native material shows through.
      - the chat / content panes keep their solid `bg-card` /
        `bg-background` so message text stays fully opaque.
    Linux has no native material and keeps the solid sidebar background. */
 html[data-desktop="darwin"][data-glass="on"],
 html[data-desktop="win32"][data-glass="on"] {
-    --desktop-chrome-bg: color-mix(in oklch, var(--sidebar) var(--desktop-glass-opacity), transparent);
+    --desktop-glass-tint: color-mix(in oklch, var(--sidebar) var(--desktop-glass-tint-strength), var(--background));
+    --desktop-chrome-bg: color-mix(in oklch, var(--desktop-glass-tint) var(--desktop-glass-alpha), transparent);
 }
 
 html[data-desktop="darwin"][data-glass="on"],
@@ -156,8 +160,8 @@ html[data-desktop="win32"] [data-slot="server-rail"] {
     background-color: transparent !important;
 }
 
-html[data-desktop="darwin"] [data-slot="channel-card"],
-html[data-desktop="win32"] [data-slot="channel-card"] {
+html[data-desktop="darwin"][data-glass="on"] [data-slot="channel-card"],
+html[data-desktop="win32"][data-glass="on"] [data-slot="channel-card"] {
     background-color: var(--desktop-chrome-bg) !important;
 }
 

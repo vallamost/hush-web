@@ -68,6 +68,9 @@ describe("UserSettingsDialog", () => {
     delete document.documentElement.dataset.theme
     delete document.documentElement.dataset.glass
     document.documentElement.style.removeProperty("--desktop-glass-opacity")
+    document.documentElement.style.removeProperty("--desktop-glass-tint-strength")
+    document.documentElement.style.removeProperty("--desktop-glass-transparency")
+    document.documentElement.style.removeProperty("--desktop-glass-alpha")
   })
 
   it("renders username + display name from the account prop", () => {
@@ -176,6 +179,9 @@ describe("UserSettingsDialog", () => {
     })
     expect(glassSwitch).toBeChecked()
     expect(screen.getByRole("slider", { name: /glass opacity/i })).toBeEnabled()
+    expect(
+      screen.getByRole("slider", { name: /glass transparency/i })
+    ).toBeEnabled()
 
     await u.click(glassSwitch)
     expect(document.documentElement.dataset.glass).toBe("off")
@@ -183,6 +189,9 @@ describe("UserSettingsDialog", () => {
       "aria-disabled",
       "true"
     )
+    expect(
+      screen.getByRole("slider", { name: /glass transparency/i })
+    ).toHaveAttribute("aria-disabled", "true")
   })
 
   it("invokes onSignOut after the destructive confirm", async () => {

@@ -5,19 +5,28 @@ export interface AppearancePreferences {
   theme: ThemePreference
   glassEnabled: boolean
   glassOpacity: number
+  glassTransparency: number
 }
 
 export const APPEARANCE_STORAGE_KEY = "hush_appearance_preferences_v1"
 
 const LEGACY_THEME_MODE_KEY = "hush_theme_mode"
-const MIN_GLASS_OPACITY = 40
-const MAX_GLASS_OPACITY = 100
-const DEFAULT_GLASS_OPACITY = 60
+export const GLASS_CONTROL_MIN = 0
+export const GLASS_CONTROL_MAX = 100
+export const GLASS_CONTROL_STEP = 1
+export const GLASS_CONTROL_MAGNET_POINTS = [0, 25, 50, 75, 100] as const
+
+const GLASS_CSS_MIN = 20
+const GLASS_CSS_MAX = 80
+const GLASS_CONTROL_DEFAULT_OPACITY = 60
+const GLASS_CONTROL_DEFAULT_TRANSPARENCY = 50
+const GLASS_MAGNET_THRESHOLD = 2
 
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
   theme: "system",
   glassEnabled: true,
-  glassOpacity: DEFAULT_GLASS_OPACITY,
+  glassOpacity: GLASS_CONTROL_DEFAULT_OPACITY,
+  glassTransparency: GLASS_CONTROL_DEFAULT_TRANSPARENCY,
 }
 
 const THEME_VALUES = new Set<ThemePreference>(["system", "light", "dark"])
@@ -26,11 +35,28 @@ function isThemePreference(value: unknown): value is ThemePreference {
   return typeof value === "string" && THEME_VALUES.has(value as ThemePreference)
 }
 
-function clampGlassOpacity(value: unknown): number {
+function clampGlassControl(value: unknown, fallback: number): number {
   if (typeof value !== "number" || !Number.isFinite(value)) {
-    return DEFAULT_GLASS_OPACITY
+    return fallback
   }
-  return Math.min(MAX_GLASS_OPACITY, Math.max(MIN_GLASS_OPACITY, Math.round(value)))
+  return Math.min(GLASS_CONTROL_MAX, Math.max(GLASS_CONTROL_MIN, Math.round(value)))
+}
+
+export function snapGlassControlValue(value: number): number {
+  const clamped = clampGlassControl(value, GLASS_CONTROL_DEFAULT_OPACITY)
+  const nearest = GLASS_CONTROL_MAGNET_POINTS.reduce((best, point) => {
+    return Math.abs(point - clamped) < Math.abs(best - clamped) ? point : best
+  }, GLASS_CONTROL_MAGNET_POINTS[0])
+
+  return Math.abs(nearest - clamped) <= GLASS_MAGNET_THRESHOLD
+    ? nearest
+    : clamped
+}
+
+export function mapGlassControlToCssPercent(value: number): number {
+  const clamped = clampGlassControl(value, GLASS_CONTROL_DEFAULT_OPACITY)
+  const ratio = clamped / GLASS_CONTROL_MAX
+  return GLASS_CSS_MIN + Math.round((GLASS_CSS_MAX - GLASS_CSS_MIN) * ratio)
 }
 
 function getLocalStorage(): Storage | null {
@@ -66,7 +92,14 @@ export function normalizeAppearancePreferences(
       typeof value?.glassEnabled === "boolean"
         ? value.glassEnabled
         : DEFAULT_APPEARANCE_PREFERENCES.glassEnabled,
-    glassOpacity: clampGlassOpacity(value?.glassOpacity),
+    glassOpacity: clampGlassControl(
+      value?.glassOpacity,
+      DEFAULT_APPEARANCE_PREFERENCES.glassOpacity
+    ),
+    glassTransparency: clampGlassControl(
+      value?.glassTransparency,
+      DEFAULT_APPEARANCE_PREFERENCES.glassTransparency
+    ),
   }
 }
 
@@ -129,7 +162,12 @@ export function applyAppearancePreferences(
   root.classList.remove("light", "dark")
   root.classList.add(resolvedTheme)
   root.dataset.glass = normalized.glassEnabled ? "on" : "off"
-  root.style.setProperty("--desktop-glass-opacity", `${normalized.glassOpacity}%`)
+  const tintStrength = mapGlassControlToCssPercent(normalized.glassOpacity)
+  const transparency = mapGlassControlToCssPercent(normalized.glassTransparency)
+  root.style.setProperty("--desktop-glass-opacity", `${tintStrength}%`)
+  root.style.setProperty("--desktop-glass-tint-strength", `${tintStrength}%`)
+  root.style.setProperty("--desktop-glass-transparency", `${transparency}%`)
+  root.style.setProperty("--desktop-glass-alpha", `${100 - transparency}%`)
 }
 
 export function applyStoredAppearancePreferences(): AppearancePreferences {

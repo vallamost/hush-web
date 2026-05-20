@@ -51,6 +51,13 @@ import {
   useAppearancePreferences,
   type ThemePreference,
 } from "@/components/theme-provider"
+import {
+  GLASS_CONTROL_MAGNET_POINTS,
+  GLASS_CONTROL_MAX,
+  GLASS_CONTROL_MIN,
+  GLASS_CONTROL_STEP,
+  snapGlassControlValue,
+} from "@/lib/appearancePreferences"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
 
 interface UserAccountInfo {
@@ -304,9 +311,62 @@ const THEME_TABS: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ]
 
-const GLASS_OPACITY_MIN = 40
-const GLASS_OPACITY_MAX = 100
-const GLASS_OPACITY_STEP = 5
+function GlassControlSlider({
+  label,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string
+  value: number
+  disabled: boolean
+  onChange: (value: number) => void
+}) {
+  const commitValue = React.useCallback(
+    (values: number[]) => {
+      const next = values[0]
+      if (typeof next === "number") {
+        onChange(snapGlassControlValue(next))
+      }
+    },
+    [onChange]
+  )
+
+  return (
+    <div
+      className="flex flex-col gap-2"
+      data-disabled={disabled ? true : undefined}
+    >
+      <Slider
+        aria-label={label}
+        disabled={disabled}
+        min={GLASS_CONTROL_MIN}
+        max={GLASS_CONTROL_MAX}
+        step={GLASS_CONTROL_STEP}
+        value={[value]}
+        onValueChange={(values) => {
+          const next = values[0]
+          if (typeof next === "number") {
+            onChange(next)
+          }
+        }}
+        onValueCommit={commitValue}
+      />
+      <div
+        aria-hidden="true"
+        className="relative h-2 px-1.5 opacity-70 group-data-[disabled=true]/field:opacity-35"
+      >
+        {GLASS_CONTROL_MAGNET_POINTS.map((point) => (
+          <span
+            key={point}
+            className="absolute top-0 size-1 -translate-x-1/2 rounded-full bg-muted-foreground"
+            style={{ left: `${point}%` }}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function formatVaultTimeoutValue(
   timeout: string | number | null | undefined
@@ -355,9 +415,11 @@ function AppearancePanel() {
     theme,
     glassEnabled,
     glassOpacity,
+    glassTransparency,
     setTheme,
     setGlassEnabled,
     setGlassOpacity,
+    setGlassTransparency,
   } = useAppearancePreferences()
 
   return (
@@ -432,23 +494,36 @@ function AppearancePanel() {
                   </span>
                 </div>
                 <FieldDescription>
-                  Higher values make the chrome more solid. Lower values reveal
-                  more of the native desktop material.
+                  Controls the strength of the Hush tint over the native
+                  desktop material.
                 </FieldDescription>
               </FieldContent>
-              <Slider
-                aria-label="Glass opacity"
+              <GlassControlSlider
+                label="Glass opacity"
                 disabled={!glassEnabled}
-                min={GLASS_OPACITY_MIN}
-                max={GLASS_OPACITY_MAX}
-                step={GLASS_OPACITY_STEP}
-                value={[glassOpacity]}
-                onValueChange={(value) => {
-                  const next = value[0]
-                  if (typeof next === "number") {
-                    setGlassOpacity(next)
-                  }
-                }}
+                value={glassOpacity}
+                onChange={setGlassOpacity}
+              />
+            </Field>
+
+            <Field data-disabled={!glassEnabled ? true : undefined}>
+              <FieldContent>
+                <div className="flex items-center justify-between gap-3">
+                  <FieldTitle>Transparency</FieldTitle>
+                  <span className="text-xs text-muted-foreground">
+                    {glassTransparency}%
+                  </span>
+                </div>
+                <FieldDescription>
+                  Controls how clearly the native desktop material shows
+                  through the chrome.
+                </FieldDescription>
+              </FieldContent>
+              <GlassControlSlider
+                label="Glass transparency"
+                disabled={!glassEnabled}
+                value={glassTransparency}
+                onChange={setGlassTransparency}
               />
             </Field>
           </FieldGroup>
