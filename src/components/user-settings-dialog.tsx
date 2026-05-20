@@ -493,22 +493,29 @@ function AppearancePanel() {
   const [capabilities, setCapabilities] = React.useState<GlassCapabilities | null>(
     null
   )
+  const [hasResolvedCapabilities, setHasResolvedCapabilities] =
+    React.useState(false)
 
   React.useEffect(() => {
     if (!bridgeCanSwitchGlassMaterial(desktopBridge)) {
       setCapabilities(null)
+      setHasResolvedCapabilities(false)
       return
     }
     let cancelled = false
     void desktopBridge
       .getGlassCapabilities()
       .then((result) => {
-        if (!cancelled) setCapabilities(result)
+        if (!cancelled) {
+          setCapabilities(result)
+          setHasResolvedCapabilities(true)
+        }
       })
       .catch((error) => {
         if (!cancelled) {
           console.warn("Failed to read desktop glass capabilities", error)
           setCapabilities(null)
+          setHasResolvedCapabilities(true)
         }
       })
     return () => {
@@ -516,11 +523,12 @@ function AppearancePanel() {
     }
   }, [desktopBridge])
 
-  const materialPickerSupported = isMaterialPickerSupported(capabilities)
-  const effectiveMaterial = normalizeGlassMaterialForCapabilities(
-    glassMaterial,
-    capabilities
-  )
+  const materialPickerSupported =
+    hasResolvedCapabilities && isMaterialPickerSupported(capabilities)
+  const effectiveMaterial =
+    hasResolvedCapabilities && capabilities
+      ? normalizeGlassMaterialForCapabilities(glassMaterial, capabilities)
+      : glassMaterial
   const platform = desktopBridge?.platform ?? null
   const supportedMaterials = capabilities?.materials ?? []
 
@@ -529,10 +537,17 @@ function AppearancePanel() {
   // the stored preference so the renderer never carries a value it
   // cannot send. The IPC effect below depends on this.
   React.useEffect(() => {
+    if (!hasResolvedCapabilities || !capabilities) return
     if (effectiveMaterial !== glassMaterial) {
       setGlassMaterial(effectiveMaterial)
     }
-  }, [effectiveMaterial, glassMaterial, setGlassMaterial])
+  }, [
+    capabilities,
+    effectiveMaterial,
+    glassMaterial,
+    hasResolvedCapabilities,
+    setGlassMaterial,
+  ])
 
   React.useEffect(() => {
     if (!bridgeCanSwitchGlassMaterial(desktopBridge)) return

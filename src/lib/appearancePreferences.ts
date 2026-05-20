@@ -79,7 +79,7 @@ const GLASS_MAGNET_THRESHOLD = 1
 export const GLASS_DEFAULT_MATERIAL: GlassMaterial = "auto"
 
 export const DEFAULT_APPEARANCE_PREFERENCES: AppearancePreferences = {
-  theme: "system",
+  theme: "dark",
   glassEnabled: true,
   glassIntensity: GLASS_INTENSITY_DEFAULT,
   glassMaterial: GLASS_DEFAULT_MATERIAL,

@@ -87,6 +87,15 @@ describe("appearancePreferences", () => {
     ).toBe(50)
   })
 
+  it("defaults new installs to dark theme with glass enabled at medium intensity", () => {
+    expect(normalizeAppearancePreferences(null)).toMatchObject({
+      theme: "dark",
+      glassEnabled: true,
+      glassIntensity: 50,
+      glassMaterial: "auto",
+    })
+  })
+
   it("migrates legacy glassOpacity/glassTransparency into a single intensity", () => {
     const result = normalizeAppearancePreferences({
       theme: "dark",
