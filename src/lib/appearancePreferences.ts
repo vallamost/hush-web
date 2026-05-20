@@ -73,7 +73,14 @@ const GLASS_SAFE_ALPHA_MAX_PERCENT = 85
  */
 const GLASS_TINT_MIN_PERCENT = 35
 const GLASS_TINT_MAX_PERCENT = 75
-const GLASS_INTENSITY_DEFAULT = 50
+/**
+ * First-install intensity. Aligns with the second magnet point of
+ * `GLASS_INTENSITY_MAGNET_POINTS` so a fresh install opens with the
+ * subtle "barely-glassed" look the product team picked. Existing users
+ * keep whatever value their `hush_appearance_preferences_v1` payload
+ * already carries.
+ */
+const GLASS_INTENSITY_DEFAULT = 25
 const GLASS_MAGNET_THRESHOLD = 1
 
 export const GLASS_DEFAULT_MATERIAL: GlassMaterial = "auto"
