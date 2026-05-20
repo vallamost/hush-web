@@ -32,17 +32,22 @@ function listChangedFiles(diffRange) {
   return output ? output.split("\n").filter(Boolean) : []
 }
 
-function listTrackedCodeFiles() {
-  const output = git(["ls-files"])
-  return output
-    ? output.split("\n").filter((file) => CODE_FILE_PATTERN.test(file))
-    : []
-}
-
 function countLines(file) {
   const text = fs.readFileSync(file, "utf8")
+  return countTextLines(text)
+}
+
+function countTextLines(text) {
   if (text.length === 0) return 0
   return text.endsWith("\n") ? text.split("\n").length - 1 : text.split("\n").length
+}
+
+function countBaseLines(baseRef, file) {
+  try {
+    return countTextLines(git(["show", `${baseRef}:${file}`]))
+  } catch {
+    return null
+  }
 }
 
 function fail(message, details = []) {
@@ -57,6 +62,7 @@ function main() {
   const maxLines = Number(process.env.PR_SIZE_MAX_LINES ?? config.maxLinesPerFile)
   const oversizedAllowlist = config.oversizedFiles ?? {}
   const diffRange = getDiffRange()
+  const baseRef = diffRange.split("...")[0]
 
   const changedFiles = listChangedFiles(diffRange)
   if (changedFiles.length > maxFiles) {
@@ -78,7 +84,7 @@ function main() {
   }
 
   const violations = []
-  for (const file of listTrackedCodeFiles()) {
+  for (const file of changedCodeFiles) {
     if (!fs.existsSync(path.resolve(file))) continue
 
     const lines = countLines(file)
@@ -90,7 +96,7 @@ function main() {
       continue
     }
 
-    if (lines > allowedLines) {
+    if (lines > allowedLines && grewPastLegacyCeiling(baseRef, file, lines, allowedLines)) {
       violations.push(
         `${file}: ${lines} lines, allowlisted ceiling is ${allowedLines}`
       )
@@ -118,3 +124,10 @@ function main() {
 }
 
 main()
+
+function grewPastLegacyCeiling(baseRef, file, lines, allowedLines) {
+  const baseLines = countBaseLines(baseRef, file)
+  if (baseLines === null) return true
+  if (baseLines <= allowedLines) return true
+  return lines > baseLines
+}

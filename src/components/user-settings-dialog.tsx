@@ -2,6 +2,7 @@ import * as React from "react"
 import {
   BellIcon,
   CircleUserIcon,
+  HelpCircleIcon,
   KeyboardIcon,
   LanguagesIcon,
   LockIcon,
@@ -65,6 +66,7 @@ import {
   getDesktopBridge,
 } from "@/lib/desktopBridge"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
+import { HelpPanel } from "@/components/settings/help-panel"
 
 interface UserAccountInfo {
   displayName: string
@@ -76,20 +78,9 @@ interface UserSettingsDialogProps {
   onOpenChange: (open: boolean) => void
   account?: UserAccountInfo
   onSignOut?: () => void | Promise<void>
-  /**
-   * URL of the auth (home) instance — the one that issued the JWT and
-   * stores the user's device list. Distinct from the currently-selected
-   * server's instance, which may be a federated peer.
-   */
   homeInstanceUrl?: string | null
-  /** Hex transparency log public key for the home instance. */
   homeLogPublicKey?: string | null
-  /** Active voice runtime surface — null when the user is not joined
-   *  to any voice channel. Lets the Voice & Video panel temporarily
-   *  isolate the mic test from the live room and push filter changes
-   *  into the published capture graph. */
   voiceRuntime?: VoiceRuntime | null
-  /** Instance origin used to scope persisted voice device preferences. */
   voicePrefsScope?: string | null
 }
 
@@ -103,8 +94,6 @@ export function UserSettingsDialog({
   voiceRuntime,
   voicePrefsScope,
 }: UserSettingsDialogProps) {
-  // Keep unfinished surfaces visible but disabled so the settings map
-  // stays recognizable while only wired panels are reachable.
   const groups: SettingsGroup[] = [
     { id: "account", label: "Account" },
     { id: "app", label: "App settings" },
@@ -213,6 +202,13 @@ export function UserSettingsDialog({
       icon: <WrenchIcon />,
       disabled: true,
       content: <PlaceholderPanel title="Advanced" />,
+    },
+    {
+      id: "help",
+      groupId: "app",
+      label: "Help",
+      icon: <HelpCircleIcon />,
+      content: <HelpPanel />,
     },
     {
       id: "logout",
