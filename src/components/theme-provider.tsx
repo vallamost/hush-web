@@ -8,6 +8,7 @@ import {
   readAppearancePreferences,
   writeAppearancePreferences,
   type AppearancePreferences,
+  type GlassMaterial,
   type ResolvedTheme,
   type ThemePreference,
 } from "@/lib/appearancePreferences"
@@ -22,12 +23,12 @@ type ThemeProviderState = {
   theme: ThemePreference
   resolvedTheme: ResolvedTheme
   glassEnabled: boolean
-  glassOpacity: number
-  glassTransparency: number
+  glassIntensity: number
+  glassMaterial: GlassMaterial
   setTheme: (theme: ThemePreference) => void
   setGlassEnabled: (enabled: boolean) => void
-  setGlassOpacity: (opacity: number) => void
-  setGlassTransparency: (transparency: number) => void
+  setGlassIntensity: (intensity: number) => void
+  setGlassMaterial: (material: GlassMaterial) => void
   setPreferences: (
     next:
       | AppearancePreferences
@@ -100,16 +101,16 @@ export function ThemeProvider({
     [setPreferences]
   )
 
-  const setGlassOpacity = React.useCallback(
-    (glassOpacity: number) => {
-      setPreferences((current) => ({ ...current, glassOpacity }))
+  const setGlassIntensity = React.useCallback(
+    (glassIntensity: number) => {
+      setPreferences((current) => ({ ...current, glassIntensity }))
     },
     [setPreferences]
   )
 
-  const setGlassTransparency = React.useCallback(
-    (glassTransparency: number) => {
-      setPreferences((current) => ({ ...current, glassTransparency }))
+  const setGlassMaterial = React.useCallback(
+    (glassMaterial: GlassMaterial) => {
+      setPreferences((current) => ({ ...current, glassMaterial }))
     },
     [setPreferences]
   )
@@ -170,19 +171,19 @@ export function ThemeProvider({
       resolvedTheme:
         preferences.theme === "system" ? systemTheme : preferences.theme,
       glassEnabled: preferences.glassEnabled,
-      glassOpacity: preferences.glassOpacity,
-      glassTransparency: preferences.glassTransparency,
+      glassIntensity: preferences.glassIntensity,
+      glassMaterial: preferences.glassMaterial,
       setTheme,
       setGlassEnabled,
-      setGlassOpacity,
-      setGlassTransparency,
+      setGlassIntensity,
+      setGlassMaterial,
       setPreferences,
     }),
     [
       preferences,
       setGlassEnabled,
-      setGlassOpacity,
-      setGlassTransparency,
+      setGlassIntensity,
+      setGlassMaterial,
       setPreferences,
       setTheme,
       systemTheme,

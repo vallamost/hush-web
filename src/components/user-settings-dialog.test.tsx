@@ -4,10 +4,11 @@
  * persists the Security → Vault timeout choice through useAuth.
  */
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { ThemeProvider } from "@/components/theme-provider"
+import type { GlassCapabilities } from "@/lib/appearancePreferences"
 
 beforeAll(() => {
   if (!window.matchMedia) {
@@ -63,13 +64,12 @@ describe("UserSettingsDialog", () => {
     cleanup()
     mockUseAuth.mockReset()
     mockGetVaultConfig.mockReset()
+    delete (window as unknown as { hushDesktop?: unknown }).hushDesktop
     localStorage.clear()
     document.documentElement.classList.remove("light", "dark")
     delete document.documentElement.dataset.theme
     delete document.documentElement.dataset.glass
-    document.documentElement.style.removeProperty("--desktop-glass-opacity")
     document.documentElement.style.removeProperty("--desktop-glass-tint-strength")
-    document.documentElement.style.removeProperty("--desktop-glass-transparency")
     document.documentElement.style.removeProperty("--desktop-glass-alpha")
   })
 
@@ -166,7 +166,7 @@ describe("UserSettingsDialog", () => {
     expect(
       screen.getByRole("heading", { name: /^appearance$/i })
     ).toBeInTheDocument()
-    expect(screen.getByRole("tab", { name: /^system$/i })).toHaveAttribute(
+    expect(screen.getByRole("tab", { name: /^dark$/i })).toHaveAttribute(
       "data-state",
       "active"
     )
@@ -178,20 +178,99 @@ describe("UserSettingsDialog", () => {
       name: /enable glass effect/i,
     })
     expect(glassSwitch).toBeChecked()
-    expect(screen.getByRole("slider", { name: /glass tint/i })).toBeEnabled()
     expect(
-      screen.getByRole("slider", { name: /glass transparency/i })
+      screen.getByRole("slider", { name: /glass intensity/i })
     ).toBeEnabled()
+    expect(
+      screen.queryByRole("slider", { name: /glass tint/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("slider", { name: /glass transparency/i })
+    ).not.toBeInTheDocument()
 
     await u.click(glassSwitch)
     expect(document.documentElement.dataset.glass).toBe("off")
-    expect(screen.getByRole("slider", { name: /glass tint/i })).toHaveAttribute(
-      "aria-disabled",
-      "true"
-    )
     expect(
-      screen.getByRole("slider", { name: /glass transparency/i })
+      screen.getByRole("slider", { name: /glass intensity/i })
     ).toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("hides the material picker outside the Electron shell", async () => {
+    render(
+      <ThemeProvider disableTransitionOnChange={false}>
+        <UserSettingsDialog
+          open
+          onOpenChange={() => {}}
+          account={{ displayName: "Yarin", username: "yarin" }}
+        />
+      </ThemeProvider>
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^appearance$/i }))
+
+    expect(
+      screen.queryByRole("combobox", { name: /glass material/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it("does not reset a stored desktop material while capabilities are loading", async () => {
+    const setGlassMaterial = vi.fn().mockResolvedValue(undefined)
+    let resolveCapabilities: (value: GlassCapabilities) => void = () => {}
+    const capabilitiesPromise = new Promise<GlassCapabilities>((resolve) => {
+      resolveCapabilities = resolve
+    })
+    Object.defineProperty(window, "hushDesktop", {
+      configurable: true,
+      value: {
+        isDesktop: true,
+        platform: "darwin",
+        setGlassMaterial,
+        getGlassCapabilities: vi.fn(() => capabilitiesPromise),
+      },
+    })
+    localStorage.setItem(
+      "hush_appearance_preferences_v1",
+      JSON.stringify({
+        theme: "dark",
+        glassEnabled: true,
+        glassIntensity: 50,
+        glassMaterial: "menu",
+      })
+    )
+
+    render(
+      <ThemeProvider disableTransitionOnChange={false}>
+        <UserSettingsDialog
+          open
+          onOpenChange={() => {}}
+          account={{ displayName: "Yarin", username: "yarin" }}
+        />
+      </ThemeProvider>
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^appearance$/i }))
+
+    expect(
+      JSON.parse(localStorage.getItem("hush_appearance_preferences_v1") ?? "{}")
+        .glassMaterial
+    ).toBe("menu")
+
+    resolveCapabilities({
+      platform: "darwin",
+      materialSwitchingSupported: true,
+      materials: ["auto", "sidebar", "under-window", "menu", "headerView"],
+      unsupportedReason: null,
+    })
+
+    await waitFor(() => {
+      expect(setGlassMaterial).toHaveBeenCalledWith("menu")
+    })
+    expect(
+      JSON.parse(localStorage.getItem("hush_appearance_preferences_v1") ?? "{}")
+        .glassMaterial
+    ).toBe("menu")
   })
 
   it("invokes onSignOut after the destructive confirm", async () => {

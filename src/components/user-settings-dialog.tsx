@@ -52,12 +52,20 @@ import {
   type ThemePreference,
 } from "@/components/theme-provider"
 import {
-  GLASS_CONTROL_MAGNET_POINTS,
-  GLASS_CONTROL_MAX,
-  GLASS_CONTROL_MIN,
-  GLASS_CONTROL_STEP,
-  snapGlassControlValue,
+  GLASS_INTENSITY_MAGNET_POINTS,
+  GLASS_INTENSITY_MAX,
+  GLASS_INTENSITY_MIN,
+  GLASS_INTENSITY_STEP,
+  isMaterialPickerSupported,
+  normalizeGlassMaterialForCapabilities,
+  snapGlassIntensity,
+  type GlassCapabilities,
+  type GlassMaterial,
 } from "@/lib/appearancePreferences"
+import {
+  bridgeCanSwitchGlassMaterial,
+  getDesktopBridge,
+} from "@/lib/desktopBridge"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
 
 interface UserAccountInfo {
@@ -311,7 +319,21 @@ const THEME_TABS: { value: ThemePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ]
 
-function GlassControlSlider({
+/**
+ * Width of the Radix slider thumb in pixels. Must stay in sync with the
+ * `size-3` (12px) class on `<SliderPrimitive.Thumb>` in
+ * `src/components/ui/slider.tsx`. The thumb's visual centre is inset by
+ * half this width from each end of the track, so any aligned overlay must
+ * use a calc-based offset rather than naive `left: N%`.
+ */
+const GLASS_SLIDER_THUMB_PX = 12
+
+function thumbCenterLeft(percent: number): string {
+  const offsetPx = GLASS_SLIDER_THUMB_PX / 2 - (percent / 100) * GLASS_SLIDER_THUMB_PX
+  return `calc(${percent}% + ${offsetPx}px)`
+}
+
+function GlassIntensitySlider({
   label,
   value,
   disabled,
@@ -326,7 +348,7 @@ function GlassControlSlider({
     (values: number[]) => {
       const next = values[0]
       if (typeof next === "number") {
-        onChange(snapGlassControlValue(next))
+        onChange(snapGlassIntensity(next))
       }
     },
     [onChange]
@@ -340,31 +362,76 @@ function GlassControlSlider({
       <Slider
         aria-label={label}
         disabled={disabled}
-        min={GLASS_CONTROL_MIN}
-        max={GLASS_CONTROL_MAX}
-        step={GLASS_CONTROL_STEP}
+        min={GLASS_INTENSITY_MIN}
+        max={GLASS_INTENSITY_MAX}
+        step={GLASS_INTENSITY_STEP}
         value={[value]}
         onValueChange={(values) => {
           const next = values[0]
           if (typeof next === "number") {
-            onChange(snapGlassControlValue(next))
+            onChange(snapGlassIntensity(next))
           }
         }}
         onValueCommit={commitValue}
       />
       <div
         aria-hidden="true"
-        className="relative h-2 px-1.5 opacity-70 group-data-[disabled=true]/field:opacity-35"
+        className="relative h-2 opacity-70 group-data-[disabled=true]/field:opacity-35"
       >
-        {GLASS_CONTROL_MAGNET_POINTS.map((point) => (
+        {GLASS_INTENSITY_MAGNET_POINTS.map((point) => (
           <span
             key={point}
             className="absolute top-0 size-1 -translate-x-1/2 rounded-full bg-muted-foreground"
-            style={{ left: `${point}%` }}
+            style={{ left: thumbCenterLeft(point) }}
           />
         ))}
       </div>
     </div>
+  )
+}
+
+const MATERIAL_LABELS: Record<GlassMaterial, string> = {
+  auto: "Automatic",
+  sidebar: "Sidebar",
+  "under-window": "Under window",
+  menu: "Menu",
+  headerView: "Header",
+  mica: "Mica",
+  acrylic: "Acrylic",
+}
+
+function GlassMaterialPicker({
+  value,
+  disabled,
+  materials,
+  onChange,
+}: {
+  value: GlassMaterial
+  disabled: boolean
+  materials: readonly GlassMaterial[]
+  onChange: (value: GlassMaterial) => void
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(next) => onChange(next as GlassMaterial)}
+      disabled={disabled}
+    >
+      <SelectTrigger
+        aria-label="Glass material"
+        className="w-full max-w-xs"
+        disabled={disabled}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {materials.map((material) => (
+          <SelectItem key={material} value={material}>
+            {MATERIAL_LABELS[material]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -414,13 +481,87 @@ function AppearancePanel() {
   const {
     theme,
     glassEnabled,
-    glassOpacity,
-    glassTransparency,
+    glassIntensity,
+    glassMaterial,
     setTheme,
     setGlassEnabled,
-    setGlassOpacity,
-    setGlassTransparency,
+    setGlassIntensity,
+    setGlassMaterial,
   } = useAppearancePreferences()
+
+  const desktopBridge = React.useMemo(() => getDesktopBridge(), [])
+  const [capabilities, setCapabilities] = React.useState<GlassCapabilities | null>(
+    null
+  )
+  const [hasResolvedCapabilities, setHasResolvedCapabilities] =
+    React.useState(false)
+
+  React.useEffect(() => {
+    if (!bridgeCanSwitchGlassMaterial(desktopBridge)) {
+      setCapabilities(null)
+      setHasResolvedCapabilities(false)
+      return
+    }
+    let cancelled = false
+    void desktopBridge
+      .getGlassCapabilities()
+      .then((result) => {
+        if (!cancelled) {
+          setCapabilities(result)
+          setHasResolvedCapabilities(true)
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("Failed to read desktop glass capabilities", error)
+          setCapabilities(null)
+          setHasResolvedCapabilities(true)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [desktopBridge])
+
+  const materialPickerSupported =
+    hasResolvedCapabilities && isMaterialPickerSupported(capabilities)
+  const effectiveMaterial =
+    hasResolvedCapabilities && capabilities
+      ? normalizeGlassMaterialForCapabilities(glassMaterial, capabilities)
+      : glassMaterial
+  const platform = desktopBridge?.platform ?? null
+  const supportedMaterials = capabilities?.materials ?? []
+
+  // If the persisted material is not in the host capability set (e.g.
+  // a Windows-only `mica` value loaded after switching to macOS), heal
+  // the stored preference so the renderer never carries a value it
+  // cannot send. The IPC effect below depends on this.
+  React.useEffect(() => {
+    if (!hasResolvedCapabilities || !capabilities) return
+    if (effectiveMaterial !== glassMaterial) {
+      setGlassMaterial(effectiveMaterial)
+    }
+  }, [
+    capabilities,
+    effectiveMaterial,
+    glassMaterial,
+    hasResolvedCapabilities,
+    setGlassMaterial,
+  ])
+
+  React.useEffect(() => {
+    if (!bridgeCanSwitchGlassMaterial(desktopBridge)) return
+    if (!materialPickerSupported) return
+    if (!supportedMaterials.includes(effectiveMaterial)) return
+    void desktopBridge.setGlassMaterial(effectiveMaterial).catch((error) => {
+      console.warn("Failed to apply desktop glass material", error)
+    })
+  }, [
+    desktopBridge,
+    effectiveMaterial,
+    materialPickerSupported,
+    supportedMaterials,
+  ])
 
   return (
     <div className="flex flex-col gap-6">
@@ -487,35 +628,54 @@ function AppearancePanel() {
 
             <Field data-disabled={!glassEnabled ? true : undefined}>
               <FieldContent>
-                <FieldTitle>Tint</FieldTitle>
+                <FieldTitle>Intensity</FieldTitle>
                 <FieldDescription>
-                  Controls the darkness of the Hush tint over the native
-                  desktop material.
+                  Adjusts how much of the native desktop material shows
+                  through the Hush chrome. The chrome always stays opaque
+                  enough to keep channel and menu text readable.
                 </FieldDescription>
               </FieldContent>
-              <GlassControlSlider
-                label="Glass tint"
+              <GlassIntensitySlider
+                label="Glass intensity"
                 disabled={!glassEnabled}
-                value={glassOpacity}
-                onChange={setGlassOpacity}
+                value={glassIntensity}
+                onChange={setGlassIntensity}
               />
             </Field>
 
-            <Field data-disabled={!glassEnabled ? true : undefined}>
-              <FieldContent>
-                <FieldTitle>Transparency</FieldTitle>
-                <FieldDescription>
-                  Controls how much of the native desktop material shows
-                  through the chrome.
-                </FieldDescription>
-              </FieldContent>
-              <GlassControlSlider
-                label="Glass transparency"
-                disabled={!glassEnabled}
-                value={glassTransparency}
-                onChange={setGlassTransparency}
-              />
-            </Field>
+            {materialPickerSupported ? (
+              <Field
+                orientation="horizontal"
+                data-disabled={!glassEnabled ? true : undefined}
+              >
+                <FieldContent>
+                  <FieldTitle>Material</FieldTitle>
+                  <FieldDescription>
+                    {platform === "darwin"
+                      ? "Pick the macOS vibrancy material applied to the window."
+                      : "Pick the Windows 11 background material applied to the window."}
+                  </FieldDescription>
+                </FieldContent>
+                <GlassMaterialPicker
+                  value={effectiveMaterial}
+                  disabled={!glassEnabled}
+                  materials={supportedMaterials}
+                  onChange={setGlassMaterial}
+                />
+              </Field>
+            ) : capabilities?.unsupportedReason ? (
+              <Field orientation="horizontal" data-disabled>
+                <FieldContent>
+                  <FieldTitle>Material</FieldTitle>
+                  <FieldDescription>
+                    {capabilities.unsupportedReason ===
+                    "linux-no-native-material"
+                      ? "Linux desktops do not expose a native window material Hush can target safely."
+                      : "This Windows build does not support runtime material switching. Update to Windows 11 22H2 or newer to enable it."}
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+            ) : null}
           </FieldGroup>
         </div>
       </section>

@@ -207,8 +207,13 @@ export function ChatEventBody({
   className,
   ...props
 }: ChatEventBodyProps) {
+  // `min-w-0` is required: the body is a flex child of `ChatEvent`, and
+  // flex children default to `min-width: auto` (= intrinsic content
+  // width). Without this, a single long unbroken token would push the
+  // body wider than the channel column and force the channel view to
+  // scroll horizontally.
   return (
-    <div className={cn("flex-1 flex flex-col", className)} {...props}>
+    <div className={cn("flex-1 min-w-0 flex flex-col", className)} {...props}>
       {children}
     </div>
   );
@@ -233,7 +238,12 @@ export function ChatEventContent({
   return (
     <div
       className={cn(
-        "text-sm @md/chat:text-base whitespace-pre-wrap",
+        // `min-w-0` lets the content honour the body's bounded width
+        // (see `ChatEventBody`), and `break-words` / `overflow-wrap:
+        // anywhere` lets long unbroken tokens — URLs, hashes, words
+        // with no spaces — wrap inside the channel column instead of
+        // forcing horizontal page scroll.
+        "text-sm @md/chat:text-base min-w-0 whitespace-pre-wrap break-words [overflow-wrap:anywhere]",
         className,
       )}
       {...props}

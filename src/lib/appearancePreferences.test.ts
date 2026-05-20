@@ -1,59 +1,119 @@
 import { afterEach, describe, expect, it } from "vitest"
 
 import {
+  NO_GLASS_SUPPORT,
   applyAppearancePreferences,
-  mapGlassControlToCssPercent,
-  mapGlassTransparencyToSurfaceAlpha,
+  isMaterialPickerSupported,
+  mapGlassIntensityToSurfaceAlpha,
+  mapGlassIntensityToTintPercent,
   normalizeAppearancePreferences,
-  snapGlassControlValue,
+  normalizeGlassMaterialForCapabilities,
+  snapGlassIntensity,
+  type GlassCapabilities,
 } from "./appearancePreferences"
+
+const darwinCapabilities: GlassCapabilities = {
+  platform: "darwin",
+  materialSwitchingSupported: true,
+  materials: ["auto", "sidebar", "under-window", "menu", "headerView"],
+  unsupportedReason: null,
+}
+
+const win22h2Capabilities: GlassCapabilities = {
+  platform: "win32",
+  materialSwitchingSupported: true,
+  materials: ["auto", "mica", "acrylic"],
+  unsupportedReason: null,
+}
+
+const win10Capabilities: GlassCapabilities = {
+  platform: "win32",
+  materialSwitchingSupported: false,
+  materials: [],
+  unsupportedReason: "win32-pre-22h2",
+}
+
+const linuxCapabilities: GlassCapabilities = {
+  platform: "linux",
+  materialSwitchingSupported: false,
+  materials: [],
+  unsupportedReason: "linux-no-native-material",
+}
 
 describe("appearancePreferences", () => {
   afterEach(() => {
     document.documentElement.classList.remove("light", "dark")
     delete document.documentElement.dataset.theme
     delete document.documentElement.dataset.glass
-    document.documentElement.style.removeProperty("--desktop-glass-opacity")
-    document.documentElement.style.removeProperty("--desktop-glass-tint-strength")
-    document.documentElement.style.removeProperty("--desktop-glass-transparency")
+    document.documentElement.style.removeProperty(
+      "--desktop-glass-tint-strength"
+    )
     document.documentElement.style.removeProperty("--desktop-glass-alpha")
   })
 
-  it("maps user-facing glass controls to the bounded CSS range", () => {
-    expect(mapGlassControlToCssPercent(0)).toBe(20)
-    expect(mapGlassControlToCssPercent(50)).toBe(50)
-    expect(mapGlassControlToCssPercent(100)).toBe(80)
+  it("maps intensity into the safe tint strength envelope", () => {
+    expect(mapGlassIntensityToTintPercent(0)).toBe(75)
+    expect(mapGlassIntensityToTintPercent(50)).toBe(55)
+    expect(mapGlassIntensityToTintPercent(100)).toBe(35)
   })
 
-  it("maps glass transparency to inverse surface alpha", () => {
-    expect(mapGlassTransparencyToSurfaceAlpha(0)).toBe(80)
-    expect(mapGlassTransparencyToSurfaceAlpha(50)).toBe(40)
-    expect(mapGlassTransparencyToSurfaceAlpha(100)).toBe(0)
+  it("maps intensity into a surface alpha bounded by the legibility floor", () => {
+    expect(mapGlassIntensityToSurfaceAlpha(0)).toBe(85)
+    expect(mapGlassIntensityToSurfaceAlpha(50)).toBe(60)
+    expect(mapGlassIntensityToSurfaceAlpha(100)).toBe(35)
   })
 
-  it("snaps glass controls only near magnetic points", () => {
-    expect(snapGlassControlValue(24)).toBe(25)
-    expect(snapGlassControlValue(26)).toBe(25)
-    expect(snapGlassControlValue(23)).toBe(23)
-    expect(snapGlassControlValue(30)).toBe(30)
+  it("never lets the surface alpha collapse below the legibility floor", () => {
+    for (let intensity = 0; intensity <= 100; intensity += 1) {
+      expect(mapGlassIntensityToSurfaceAlpha(intensity)).toBeGreaterThanOrEqual(
+        35
+      )
+    }
   })
 
-  it("normalizes missing glass transparency to the default", () => {
+  it("snaps intensity only near magnetic points", () => {
+    expect(snapGlassIntensity(24)).toBe(25)
+    expect(snapGlassIntensity(26)).toBe(25)
+    expect(snapGlassIntensity(23)).toBe(23)
+    expect(snapGlassIntensity(30)).toBe(30)
+  })
+
+  it("normalizes missing intensity to the default", () => {
     expect(
       normalizeAppearancePreferences({
         theme: "dark",
         glassEnabled: true,
-        glassOpacity: 60,
-      }).glassTransparency
+      }).glassIntensity
     ).toBe(50)
   })
 
-  it("applies independent glass tint and transparency variables", () => {
-    applyAppearancePreferences({
+  it("defaults new installs to dark theme with glass enabled at medium intensity", () => {
+    expect(normalizeAppearancePreferences(null)).toMatchObject({
+      theme: "dark",
+      glassEnabled: true,
+      glassIntensity: 50,
+      glassMaterial: "auto",
+    })
+  })
+
+  it("migrates legacy glassOpacity/glassTransparency into a single intensity", () => {
+    const result = normalizeAppearancePreferences({
       theme: "dark",
       glassEnabled: true,
       glassOpacity: 60,
-      glassTransparency: 50,
+      glassTransparency: 80,
+    })
+    expect(result.glassIntensity).toBe(80)
+    expect("glassOpacity" in result).toBe(false)
+    expect("glassTransparency" in result).toBe(false)
+  })
+
+  it("applies safe glass CSS variables on the root", () => {
+    applyAppearancePreferences({
+      theme: "dark",
+      glassEnabled: true,
+      glassIntensity: 50,
+      glassMaterial: "auto",
     })
 
     expect(document.documentElement.dataset.glass).toBe("on")
@@ -61,27 +121,56 @@ describe("appearancePreferences", () => {
       document.documentElement.style.getPropertyValue(
         "--desktop-glass-tint-strength"
       )
-    ).toBe("56%")
-    expect(
-      document.documentElement.style.getPropertyValue(
-        "--desktop-glass-transparency"
-      )
-    ).toBe("50%")
+    ).toBe("55%")
     expect(
       document.documentElement.style.getPropertyValue("--desktop-glass-alpha")
-    ).toBe("40%")
+    ).toBe("60%")
   })
 
-  it("makes maximum glass transparency fully transparent", () => {
-    applyAppearancePreferences({
+  it("rejects unknown glass material identifiers", () => {
+    const result = normalizeAppearancePreferences({
       theme: "dark",
       glassEnabled: true,
-      glassOpacity: 60,
-      glassTransparency: 100,
+      glassIntensity: 50,
+      glassMaterial: "obviously-fake" as never,
     })
+    expect(result.glassMaterial).toBe("auto")
+  })
 
+  it("opens the picker only when the host advertises a non-auto material", () => {
+    expect(isMaterialPickerSupported(darwinCapabilities)).toBe(true)
+    expect(isMaterialPickerSupported(win22h2Capabilities)).toBe(true)
+    expect(isMaterialPickerSupported(win10Capabilities)).toBe(false)
+    expect(isMaterialPickerSupported(linuxCapabilities)).toBe(false)
+    expect(isMaterialPickerSupported(NO_GLASS_SUPPORT)).toBe(false)
+    expect(isMaterialPickerSupported(null)).toBe(false)
+  })
+
+  it("falls back to auto when material switching is unsupported", () => {
     expect(
-      document.documentElement.style.getPropertyValue("--desktop-glass-alpha")
-    ).toBe("0%")
+      normalizeGlassMaterialForCapabilities("mica", linuxCapabilities)
+    ).toBe("auto")
+    expect(
+      normalizeGlassMaterialForCapabilities("sidebar", win10Capabilities)
+    ).toBe("auto")
+    expect(normalizeGlassMaterialForCapabilities("sidebar", null)).toBe("auto")
+  })
+
+  it("collapses stale cross-platform stored materials onto auto", () => {
+    expect(
+      normalizeGlassMaterialForCapabilities("mica", darwinCapabilities)
+    ).toBe("auto")
+    expect(
+      normalizeGlassMaterialForCapabilities("sidebar", win22h2Capabilities)
+    ).toBe("auto")
+  })
+
+  it("keeps a supported material untouched", () => {
+    expect(
+      normalizeGlassMaterialForCapabilities("under-window", darwinCapabilities)
+    ).toBe("under-window")
+    expect(
+      normalizeGlassMaterialForCapabilities("acrylic", win22h2Capabilities)
+    ).toBe("acrylic")
   })
 })
