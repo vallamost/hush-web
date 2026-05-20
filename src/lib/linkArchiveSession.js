@@ -87,10 +87,12 @@ const DOWNLOAD_CONCURRENCY = 4;
  * either explicitly terminal or whose hard deadline has passed, we:
  *   1. Unwrap the persisted upload + download tokens (requires the
  *      unlocked root key — same trust boundary as resume).
- *   2. Call the server's `DELETE /link-archive/{id}`. The server treats
- *      404 / 410 as a no-op (archive already gone).
- *   3. Drop the local row regardless of the DELETE result — keeping it
- *      around would let the next retry attempt the same dead row.
+ *   2. Call the server's `DELETE /link-archive/{id}`. The transport
+ *      reports success only when the archive is known to be gone.
+ *   3. Drop the local row only after the server slot is known to be
+ *      clear. If cleanup fails, keep the wrapped tokens so a later
+ *      retry can attempt cleanup again instead of waiting for the
+ *      server's grace-window reaper.
  *
  * In-progress rows are left untouched so an interrupted upload can
  * still resume via `resumeUploadArchiveSession`. The caller is expected
@@ -112,6 +114,7 @@ export async function reclaimStaleExportArchives({ baseUrl, rootPrivateKey }) {
     return 0;
   }
   let reclaimed = 0;
+  let blocked = false;
   const now = Date.now();
   for (const row of rows) {
     if (!row || !row.archiveId) continue;
@@ -132,19 +135,30 @@ export async function reclaimStaleExportArchives({ baseUrl, rootPrivateKey }) {
     } catch (err) {
       console.warn('[linkArchive] reclaimStaleExportArchives: token unwrap failed', err);
     }
+    let shouldDeleteLocal = false;
     if (uploadToken || downloadToken) {
       try {
-        await deleteArchive(row.archiveId, { uploadToken, downloadToken }, row.baseUrl || baseUrl);
+        shouldDeleteLocal = await deleteArchive(row.archiveId, { uploadToken, downloadToken }, row.baseUrl || baseUrl) !== false;
       } catch (err) {
-        // deleteArchive already swallows network errors; this catch
-        // covers programmer mistakes (bad URL etc.) so the loop never
-        // crashes the caller's fresh-attempt path.
         console.warn('[linkArchive] reclaimStaleExportArchives: deleteArchive threw', err);
       }
+    } else {
+      console.warn('[linkArchive] reclaimStaleExportArchives: no persisted archive token to reclaim', {
+        archiveId: row.archiveId,
+      });
+    }
+    if (!shouldDeleteLocal) {
+      blocked = true;
+      continue;
     }
     try { await deleteExport(row.archiveId); }
     catch (err) { console.warn('[linkArchive] reclaimStaleExportArchives: deleteExport failed', err); }
     reclaimed += 1;
+  }
+  if (blocked) {
+    throw new Error(
+      'A previous device-link transfer could not be cleaned up. Check your connection, then try again.',
+    );
   }
   return reclaimed;
 }

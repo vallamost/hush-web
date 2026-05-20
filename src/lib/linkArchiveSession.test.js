@@ -88,7 +88,7 @@ describe('uploadArchiveSession', () => {
       },
     });
     transportMock.uploadChunk.mockRejectedValue(new Error('upload boom'));
-    transportMock.deleteArchive.mockResolvedValue(undefined);
+    transportMock.deleteArchive.mockResolvedValue(true);
   });
 
   it('best-effort deletes the server archive when upload fails after init', async () => {
@@ -203,7 +203,7 @@ describe('reclaimStaleExportArchives', () => {
     expect(exportStoreMock.deleteExport).not.toHaveBeenCalled();
   });
 
-  it('drops the local row even when the server DELETE fails', async () => {
+  it('keeps the local row when the server DELETE fails so cleanup can retry', async () => {
     exportStoreMock.listExports.mockResolvedValueOnce([
       {
         archiveId: 'gone-arch',
@@ -213,15 +213,14 @@ describe('reclaimStaleExportArchives', () => {
       },
     ]);
     exportStoreMock.unwrapUploadToken.mockResolvedValueOnce('gone-up-token');
-    transportMock.deleteArchive.mockRejectedValueOnce(new Error('network down'));
+    transportMock.deleteArchive.mockResolvedValueOnce(false);
 
-    const reclaimed = await reclaimStaleExportArchives({
+    await expect(reclaimStaleExportArchives({
       baseUrl: 'https://api.example.com',
       rootPrivateKey: new Uint8Array(32).fill(3),
-    });
+    })).rejects.toThrow(/could not be cleaned up/i);
 
-    expect(reclaimed).toBe(1);
-    expect(exportStoreMock.deleteExport).toHaveBeenCalledWith('gone-arch');
+    expect(exportStoreMock.deleteExport).not.toHaveBeenCalled();
   });
 
   it('is a no-op when no rootPrivateKey is supplied', async () => {

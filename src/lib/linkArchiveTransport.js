@@ -454,11 +454,14 @@ export async function downloadChunk(archiveId, downloadToken, idx, baseUrl = '')
 
 /**
  * Best-effort delete; non-fatal on failure (the server purger reaps).
+ * Returns whether the archive is known to be gone. Existing callers may
+ * ignore the boolean when deletion is only opportunistic; retry paths
+ * that need to free the single per-user archive slot must inspect it.
  *
  * @param {string} archiveId
  * @param {{ uploadToken?: string, downloadToken?: string }} tokens
  * @param {string} baseUrl
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
 export async function deleteArchive(archiveId, tokens, baseUrl = '') {
   const url = `${archiveBaseUrl(baseUrl)}/api/auth/link-archive/${archiveId}`;
@@ -466,9 +469,11 @@ export async function deleteArchive(archiveId, tokens, baseUrl = '') {
   if (tokens.uploadToken) headers['X-Upload-Token'] = tokens.uploadToken;
   if (tokens.downloadToken) headers['X-Download-Token'] = tokens.downloadToken;
   try {
-    await fetch(url, { method: 'DELETE', headers });
+    const res = await fetch(url, { method: 'DELETE', headers });
+    return res.ok || res.status === 404 || res.status === 410;
   } catch {
     // Non-fatal; purger handles cleanup.
+    return false;
   }
 }
 
