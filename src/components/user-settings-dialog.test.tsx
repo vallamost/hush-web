@@ -67,9 +67,7 @@ describe("UserSettingsDialog", () => {
     document.documentElement.classList.remove("light", "dark")
     delete document.documentElement.dataset.theme
     delete document.documentElement.dataset.glass
-    document.documentElement.style.removeProperty("--desktop-glass-opacity")
     document.documentElement.style.removeProperty("--desktop-glass-tint-strength")
-    document.documentElement.style.removeProperty("--desktop-glass-transparency")
     document.documentElement.style.removeProperty("--desktop-glass-alpha")
   })
 
@@ -178,20 +176,40 @@ describe("UserSettingsDialog", () => {
       name: /enable glass effect/i,
     })
     expect(glassSwitch).toBeChecked()
-    expect(screen.getByRole("slider", { name: /glass tint/i })).toBeEnabled()
     expect(
-      screen.getByRole("slider", { name: /glass transparency/i })
+      screen.getByRole("slider", { name: /glass intensity/i })
     ).toBeEnabled()
+    expect(
+      screen.queryByRole("slider", { name: /glass tint/i })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("slider", { name: /glass transparency/i })
+    ).not.toBeInTheDocument()
 
     await u.click(glassSwitch)
     expect(document.documentElement.dataset.glass).toBe("off")
-    expect(screen.getByRole("slider", { name: /glass tint/i })).toHaveAttribute(
-      "aria-disabled",
-      "true"
-    )
     expect(
-      screen.getByRole("slider", { name: /glass transparency/i })
+      screen.getByRole("slider", { name: /glass intensity/i })
     ).toHaveAttribute("aria-disabled", "true")
+  })
+
+  it("hides the material picker outside the Electron shell", async () => {
+    render(
+      <ThemeProvider disableTransitionOnChange={false}>
+        <UserSettingsDialog
+          open
+          onOpenChange={() => {}}
+          account={{ displayName: "Yarin", username: "yarin" }}
+        />
+      </ThemeProvider>
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^appearance$/i }))
+
+    expect(
+      screen.queryByRole("combobox", { name: /glass material/i })
+    ).not.toBeInTheDocument()
   })
 
   it("invokes onSignOut after the destructive confirm", async () => {

@@ -28,10 +28,15 @@
        topbar root to `var(--background)` so the bar fuses with their
        `bg-background` wrapper instead. */
     --desktop-topbar-bg: var(--desktop-chrome-bg);
-    --desktop-glass-opacity: 56%;
-    --desktop-glass-tint-strength: 56%;
-    --desktop-glass-transparency: 50%;
-    --desktop-glass-alpha: 40%;
+    /* Bounded tint + alpha applied to the desktop chrome when the native
+       window material is active. Updated at runtime by the appearance
+       provider based on the user's Intensity preference. The defaults
+       below match `mapGlassIntensityToTintPercent(50)` and
+       `mapGlassIntensityToSurfaceAlpha(50)` and stay inside the safe
+       envelope defined in `appearancePreferences.ts`, so the chrome is
+       legible even before JS hydrates. */
+    --desktop-glass-tint-strength: 55%;
+    --desktop-glass-alpha: 60%;
 }
 
 /* ── Desktop shell (Electron only) ─────────────────────────────────────────
@@ -121,15 +126,19 @@ html[data-theme-transition="on"] * {
 }
 
 /* ── Native window material (desktop only) ───────────────────────────────
-   Electron sets `vibrancy: 'sidebar'` on macOS and `backgroundMaterial:
-   'mica'` on Win11 (see `hush-desktop/src/main/window-config.ts`). For
-   the material to be visible the renderer must not paint an opaque
+   Electron sets a conservative default material per platform (macOS
+   vibrancy, Win11 backgroundMaterial — see
+   `hush-desktop/src/main/window-config.ts`) and the user can pick a
+   different supported material at runtime via the appearance settings.
+   For the material to be visible the renderer must not paint an opaque
    color on top of the same area, so for those platforms only:
      - root background is fully transparent,
      - the authenticated chrome surfaces (server rail, channel-sidebar
-       inner card, topbar) use a translucent tint over the OS material.
-       `Tint` controls surface color strength; `Transparency` controls
-       the surface alpha, reaching a fully transparent chrome at 100%.
+       inner card, topbar) use a bounded translucent tint over the OS
+       material. The single `Intensity` control drives both the tint
+       strength and the surface alpha, and both values are clamped to a
+       safe envelope (see `appearancePreferences.ts`) so the chrome
+       never becomes illegible.
      - the chat / content panes keep their solid `bg-card` /
        `bg-background` so message text stays fully opaque.
    Linux has no native material and keeps the solid sidebar background. */

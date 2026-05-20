@@ -53,7 +53,12 @@ export const ChatMessages = React.forwardRef<HTMLDivElement, ChatMessagesProps>(
       <div
         ref={ref}
         className={cn(
-          "flex-1 flex flex-col-reverse overflow-auto overscroll-contain py-2",
+          // `overflow-y-auto overflow-x-hidden` keeps vertical scrolling
+          // for new messages but never lets a single long message turn
+          // the entire channel view into a horizontal scroller — long
+          // content has to wrap inside its bubble, and any inner
+          // overflow (e.g. a code block) is owned by the inner element.
+          "flex-1 flex flex-col-reverse overflow-y-auto overflow-x-hidden overscroll-contain py-2",
           className,
         )}
         {...props}
