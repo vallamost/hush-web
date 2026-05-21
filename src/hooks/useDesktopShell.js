@@ -96,9 +96,6 @@ export function markDesktopShellDocument(
     ? api.platform
     : 'true';
   root.dataset.desktop = marker;
-  root.dataset.desktopReveal = typeof api.onWindowRevealed === 'function'
-    ? 'pending'
-    : 'ready';
   return true;
 }
 
@@ -122,25 +119,13 @@ export function useDesktopShell() {
     if (!isDesktopBridge(api)) return undefined;
     const root = document.documentElement;
     const previous = root.dataset.desktop ?? null;
-    const previousReveal = root.dataset.desktopReveal ?? null;
     markDesktopShellDocument(api, root);
-    const unsubscribe = typeof api.onWindowRevealed === 'function'
-      ? api.onWindowRevealed(() => {
-        root.dataset.desktopReveal = 'ready';
-      })
-      : null;
 
     return () => {
-      unsubscribe?.();
       if (previous === null) {
         delete root.dataset.desktop;
       } else {
         root.dataset.desktop = previous;
-      }
-      if (previousReveal === null) {
-        delete root.dataset.desktopReveal;
-      } else {
-        root.dataset.desktopReveal = previousReveal;
       }
     };
   }, []);

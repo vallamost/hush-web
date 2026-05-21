@@ -20,7 +20,6 @@ export interface DesktopBridge {
   getRuntimeInfo?: () => Promise<DesktopRuntimeInfo>
   setGlassMaterial?: (material: GlassMaterial) => Promise<void>
   getGlassCapabilities?: () => Promise<GlassCapabilities>
-  onWindowRevealed?: (listener: () => void) => () => void
 }
 
 export interface DesktopRuntimeInfo {

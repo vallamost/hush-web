@@ -148,26 +148,6 @@ html[data-desktop="win32"][data-glass="on"] {
     --desktop-chrome-bg: color-mix(in oklch, var(--desktop-glass-tint) var(--desktop-glass-alpha), transparent);
 }
 
-html[data-desktop][data-desktop-reveal="pending"] {
-    --desktop-chrome-bg: var(--sidebar);
-}
-
-html[data-desktop] [data-desktop-chrome="authenticated-shell"],
-html[data-desktop] [data-slot="channel-card"],
-html[data-desktop] [data-slot="bottom-dock-panel"],
-html[data-desktop] .hush-desktop-topbar {
-    transition: background-color 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-    html[data-desktop] [data-desktop-chrome="authenticated-shell"],
-    html[data-desktop] [data-slot="channel-card"],
-    html[data-desktop] [data-slot="bottom-dock-panel"],
-    html[data-desktop] .hush-desktop-topbar {
-        transition-duration: 0ms;
-    }
-}
-
 html[data-desktop="darwin"][data-glass="on"],
 html[data-desktop="darwin"][data-glass="on"] body,
 html[data-desktop="win32"][data-glass="on"],

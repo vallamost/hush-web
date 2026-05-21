@@ -2,7 +2,6 @@ import { Card } from "@/components/ui/card"
 import { GlobalBugReportButton } from "@/components/global-bug-report-button"
 import { UserMenu, type UserMenuUser } from "@/components/user-menu"
 import { VoicePip } from "@/components/voice-pip"
-import { AnimatePresence } from "framer-motion"
 
 interface BottomDockProps {
   user: UserMenuUser
@@ -32,9 +31,7 @@ export function BottomDock({
 }: BottomDockProps) {
   return (
     <div className="flex w-full flex-col gap-1">
-      <AnimatePresence initial={false}>
-        {voice ? <VoicePip key="voice-pip" {...voice} /> : null}
-      </AnimatePresence>
+      {voice ? <VoicePip {...voice} /> : null}
       <Card
         data-slot="bottom-dock-panel"
         className="gap-0 rounded-lg border-transparent py-0 shadow-none ring-0"
