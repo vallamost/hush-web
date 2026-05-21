@@ -1,5 +1,42 @@
 import { useEffect } from 'react';
 
+let hasSignaledRendererReady = false;
+
+function isDesktopBridge(api) {
+  return api && api.isDesktop === true;
+}
+
+function notifyRendererReady(api) {
+  if (typeof api.notifyRendererReady !== 'function') return;
+  api.notifyRendererReady();
+}
+
+export function markDesktopShellDocument(
+  api = typeof window === 'undefined' ? undefined : window.hushDesktop,
+  root = typeof document === 'undefined' ? undefined : document.documentElement,
+) {
+  if (!root || !isDesktopBridge(api)) return false;
+  const marker = typeof api.platform === 'string' && api.platform.length > 0
+    ? api.platform
+    : 'true';
+  root.dataset.desktop = marker;
+  return true;
+}
+
+export function signalDesktopRendererReady(
+  api = typeof window === 'undefined' ? undefined : window.hushDesktop,
+) {
+  if (hasSignaledRendererReady || !isDesktopBridge(api)) return false;
+  hasSignaledRendererReady = true;
+  try {
+    notifyRendererReady(api);
+    return true;
+  } catch {
+    hasSignaledRendererReady = false;
+    return false;
+  }
+}
+
 /**
  * Marks the document root with `data-desktop="<platform>"` while running
  * inside the Electron renderer, and removes the marker on unmount. Acts as
@@ -17,26 +54,12 @@ export function useDesktopShell() {
     if (typeof window === 'undefined') return undefined;
     if (typeof document === 'undefined') return undefined;
     const api = window.hushDesktop;
-    if (!api || api.isDesktop !== true) return undefined;
+    if (!isDesktopBridge(api)) return undefined;
     const root = document.documentElement;
-    const marker = typeof api.platform === 'string' && api.platform.length > 0
-      ? api.platform
-      : 'true';
     const previous = root.dataset.desktop ?? null;
-    root.dataset.desktop = marker;
+    markDesktopShellDocument(api, root);
+    signalDesktopRendererReady(api);
 
-    // Signal the main process that the desktop shell is mounted and the
-    // base classes are applied, so it can reveal the cold-launch window
-    // without a flash of unstyled UI. Fire-and-forget: main is idempotent
-    // and a missing method (older desktop builds) silently degrades to
-    // the legacy `ready-to-show` reveal path.
-    if (typeof api.notifyRendererReady === 'function') {
-      try {
-        api.notifyRendererReady();
-      } catch {
-        // ignore preload bridge errors
-      }
-    }
     return () => {
       if (previous === null) {
         delete root.dataset.desktop;
@@ -45,4 +68,8 @@ export function useDesktopShell() {
       }
     };
   }, []);
+}
+
+export function __resetDesktopRendererReadyForTests() {
+  hasSignaledRendererReady = false;
 }

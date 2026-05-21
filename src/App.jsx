@@ -229,7 +229,10 @@ function AppContent() {
 
           {/* DM landing / no-guild empty state */}
           <Route path="/home" element={<AuthenticatedApp />} />
-          <Route path="/home/:channelSlug" element={<AuthenticatedApp />} />
+          <Route
+            path="/home/:channelSlug"
+            element={<AuthenticatedApp />}
+          />
 
           {/* Guild discovery */}
           <Route path="/explore" element={<ExplorePage />} />
@@ -244,7 +247,10 @@ function AppContent() {
           <Route path="/link-device" element={<LinkDevice />} />
 
           {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
-          <Route path="/:instance/:guildSlug/:channelSlug?" element={<AuthenticatedApp />} />
+          <Route
+            path="/:instance/:guildSlug/:channelSlug?"
+            element={<AuthenticatedApp />}
+          />
 
           {/* Legacy redirects */}
           <Route path="/servers/:serverId/*" element={<Navigate to="/home" replace />} />

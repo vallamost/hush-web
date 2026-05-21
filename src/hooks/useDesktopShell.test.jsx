@@ -1,6 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { render, cleanup } from '@testing-library/react';
-import { useDesktopShell } from './useDesktopShell.js';
+import {
+  __resetDesktopRendererReadyForTests,
+  markDesktopShellDocument,
+  signalDesktopRendererReady,
+  useDesktopShell,
+} from './useDesktopShell.js';
 
 function HookHarness() {
   useDesktopShell();
@@ -10,6 +15,9 @@ function HookHarness() {
 describe('useDesktopShell', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    __resetDesktopRendererReadyForTests();
     delete window.hushDesktop;
     delete document.documentElement.dataset.desktop;
   });
@@ -43,6 +51,14 @@ describe('useDesktopShell', () => {
     expect(document.documentElement.dataset.desktop).toBe('linux');
   });
 
+  it('can mark the desktop document before React renders', () => {
+    window.hushDesktop = { isDesktop: true, platform: 'darwin' };
+
+    expect(markDesktopShellDocument()).toBe(true);
+
+    expect(document.documentElement.dataset.desktop).toBe('darwin');
+  });
+
   it('removes the marker on unmount', () => {
     window.hushDesktop = { isDesktop: true, platform: 'darwin' };
     const { unmount } = render(<HookHarness />);
@@ -55,5 +71,35 @@ describe('useDesktopShell', () => {
     window.hushDesktop = { isDesktop: true };
     render(<HookHarness />);
     expect(document.documentElement.dataset.desktop).toBe('true');
+  });
+
+  it('signals renderer-ready from the shell marker hook', () => {
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+
+    render(<HookHarness />);
+
+    expect(document.documentElement.dataset.desktop).toBe('darwin');
+    expect(notifyRendererReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('signals renderer-ready at most once', () => {
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+
+    const first = render(<HookHarness />);
+    first.unmount();
+    render(<HookHarness />);
+
+    expect(notifyRendererReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('can signal renderer-ready before React renders', () => {
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+
+    expect(signalDesktopRendererReady()).toBe(true);
+    expect(signalDesktopRendererReady()).toBe(false);
+    expect(notifyRendererReady).toHaveBeenCalledTimes(1);
   });
 });

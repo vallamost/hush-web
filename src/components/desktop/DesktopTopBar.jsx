@@ -33,13 +33,13 @@ const MAC_TRAFFIC_LIGHT_INSET_PX = 78;
  */
 const WIN_OVERLAY_FALLBACK_PX = 140;
 
-function computeSafeAreaStyle(platform) {
+function computeSafeAreaVars(platform) {
   if (platform === 'darwin') {
-    return { paddingLeft: `${MAC_TRAFFIC_LIGHT_INSET_PX}px` };
+    return { '--desktop-left-safe-area': `${MAC_TRAFFIC_LIGHT_INSET_PX}px` };
   }
   if (platform === 'win32') {
     return {
-      paddingRight:
+      '--desktop-right-safe-area':
         `calc(100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, calc(100vw - ${WIN_OVERLAY_FALLBACK_PX}px)))`,
     };
   }
@@ -94,7 +94,7 @@ export function DesktopTopBar() {
   if (api.platform === 'linux') return null;
 
   const isAuthenticated = AUTHENTICATED_BOOT_STATES.has(bootState);
-  const safeAreaStyle = computeSafeAreaStyle(api.platform);
+  const safeAreaVars = computeSafeAreaVars(api.platform);
   const isMac = api.platform === 'darwin';
   const instanceUrl = isAuthenticated ? pickActiveInstanceUrl(mergedGuilds) : null;
 
@@ -121,7 +121,7 @@ export function DesktopTopBar() {
       style={{
         WebkitAppRegion: 'drag',
         '--desktop-topbar-bg': topbarBgVar,
-        ...safeAreaStyle,
+        ...safeAreaVars,
       }}
     >
       <div className="hush-desktop-topbar__cluster hush-desktop-topbar__cluster--left">

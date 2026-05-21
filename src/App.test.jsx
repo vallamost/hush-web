@@ -275,10 +275,14 @@ describe('App - blocked-tab overlay', () => {
   beforeEach(() => {
     vi.useRealTimers();
     cleanup();
+    delete window.hushDesktop;
+    delete window.requestAnimationFrame;
   });
 
   afterEach(() => {
     cleanup();
+    delete window.hushDesktop;
+    delete window.requestAnimationFrame;
   });
 
   it('renders the blocked-tab overlay when isBlockedTab is true', () => {

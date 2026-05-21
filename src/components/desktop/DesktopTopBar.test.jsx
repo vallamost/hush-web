@@ -84,7 +84,8 @@ describe('DesktopTopBar', () => {
     installBridge('darwin');
     const { container } = render(<DesktopTopBar />);
     const bar = container.querySelector('.hush-desktop-topbar');
-    expect(bar.style.paddingLeft).toBe('78px');
+    expect(bar.style.getPropertyValue('--desktop-left-safe-area')).toBe('78px');
+    expect(bar.style.paddingLeft).toBe('');
     expect(bar.style.paddingRight).toBe('');
   });
 
@@ -93,9 +94,10 @@ describe('DesktopTopBar', () => {
     const { container } = render(<DesktopTopBar />);
     const bar = container.querySelector('.hush-desktop-topbar');
     expect(bar.dataset.platform).toBe('win32');
-    expect(bar.style.paddingRight).toContain('titlebar-area-x');
-    expect(bar.style.paddingRight).toContain('titlebar-area-width');
-    expect(bar.style.paddingRight).toContain('140px');
+    expect(bar.style.getPropertyValue('--desktop-right-safe-area')).toContain('titlebar-area-x');
+    expect(bar.style.getPropertyValue('--desktop-right-safe-area')).toContain('titlebar-area-width');
+    expect(bar.style.getPropertyValue('--desktop-right-safe-area')).toContain('140px');
+    expect(bar.style.paddingRight).toBe('');
     expect(bar.style.paddingLeft).toBe('');
   });
 
