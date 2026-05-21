@@ -20,6 +20,7 @@ describe('useDesktopShell', () => {
     __resetDesktopRendererReadyForTests();
     delete window.hushDesktop;
     delete document.documentElement.dataset.desktop;
+    delete document.documentElement.dataset.desktopReveal;
     delete window.requestAnimationFrame;
   });
 
@@ -38,12 +39,14 @@ describe('useDesktopShell', () => {
     window.hushDesktop = { isDesktop: true, platform: 'darwin' };
     render(<HookHarness />);
     expect(document.documentElement.dataset.desktop).toBe('darwin');
+    expect(document.documentElement.dataset.desktopReveal).toBe('ready');
   });
 
   it('sets data-desktop="win32" on Windows desktop context', () => {
     window.hushDesktop = { isDesktop: true, platform: 'win32' };
     render(<HookHarness />);
     expect(document.documentElement.dataset.desktop).toBe('win32');
+    expect(document.documentElement.dataset.desktopReveal).toBe('ready');
   });
 
   it('sets data-desktop="linux" on Linux (the marker is set; CSS decides what to apply per platform)', () => {
@@ -58,6 +61,25 @@ describe('useDesktopShell', () => {
     expect(markDesktopShellDocument()).toBe(true);
 
     expect(document.documentElement.dataset.desktop).toBe('darwin');
+    expect(document.documentElement.dataset.desktopReveal).toBe('ready');
+  });
+
+  it('keeps chrome in solid reveal mode until the desktop window is visible', () => {
+    let revealListener = null;
+    window.hushDesktop = {
+      isDesktop: true,
+      platform: 'darwin',
+      onWindowRevealed: (listener) => {
+        revealListener = listener;
+        return vi.fn();
+      },
+    };
+
+    render(<HookHarness />);
+
+    expect(document.documentElement.dataset.desktopReveal).toBe('pending');
+    revealListener();
+    expect(document.documentElement.dataset.desktopReveal).toBe('ready');
   });
 
   it('removes the marker on unmount', () => {
@@ -92,6 +114,7 @@ describe('DesktopRendererReadySignal', () => {
     vi.restoreAllMocks();
     __resetDesktopRendererReadyForTests();
     delete window.hushDesktop;
+    delete document.documentElement.dataset.desktopReveal;
     delete window.requestAnimationFrame;
   });
 
