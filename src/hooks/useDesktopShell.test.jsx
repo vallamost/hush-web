@@ -1,6 +1,11 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, cleanup } from '@testing-library/react';
-import { useDesktopShell } from './useDesktopShell.js';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { act, render, cleanup } from '@testing-library/react';
+import {
+  __resetDesktopRendererReadyForTests,
+  DesktopRendererReadySignal,
+  markDesktopShellDocument,
+  useDesktopShell,
+} from './useDesktopShell.js';
 
 function HookHarness() {
   useDesktopShell();
@@ -10,8 +15,12 @@ function HookHarness() {
 describe('useDesktopShell', () => {
   afterEach(() => {
     cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    __resetDesktopRendererReadyForTests();
     delete window.hushDesktop;
     delete document.documentElement.dataset.desktop;
+    delete window.requestAnimationFrame;
   });
 
   it('is a no-op in browser context (no window.hushDesktop bridge)', () => {
@@ -43,6 +52,14 @@ describe('useDesktopShell', () => {
     expect(document.documentElement.dataset.desktop).toBe('linux');
   });
 
+  it('can mark the desktop document before React renders', () => {
+    window.hushDesktop = { isDesktop: true, platform: 'darwin' };
+
+    expect(markDesktopShellDocument()).toBe(true);
+
+    expect(document.documentElement.dataset.desktop).toBe('darwin');
+  });
+
   it('removes the marker on unmount', () => {
     window.hushDesktop = { isDesktop: true, platform: 'darwin' };
     const { unmount } = render(<HookHarness />);
@@ -55,5 +72,78 @@ describe('useDesktopShell', () => {
     window.hushDesktop = { isDesktop: true };
     render(<HookHarness />);
     expect(document.documentElement.dataset.desktop).toBe('true');
+  });
+
+  it('does not signal renderer-ready from the shell marker hook', () => {
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+
+    render(<HookHarness />);
+
+    expect(document.documentElement.dataset.desktop).toBe('darwin');
+    expect(notifyRendererReady).not.toHaveBeenCalled();
+  });
+});
+
+describe('DesktopRendererReadySignal', () => {
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+    __resetDesktopRendererReadyForTests();
+    delete window.hushDesktop;
+    delete window.requestAnimationFrame;
+  });
+
+  it('waits for stable paint and DOM idle before notifying main', async () => {
+    vi.useFakeTimers();
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+    window.requestAnimationFrame = (callback) => {
+      setTimeout(() => callback(performance.now()), 0);
+      return 1;
+    };
+
+    render(<DesktopRendererReadySignal />);
+
+    expect(notifyRendererReady).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(notifyRendererReady).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not notify while ready is false', async () => {
+    vi.useFakeTimers();
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+
+    render(<DesktopRendererReadySignal ready={false} />);
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(notifyRendererReady).not.toHaveBeenCalled();
+  });
+
+  it('notifies at most once across remounts', async () => {
+    vi.useFakeTimers();
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+
+    const first = render(<DesktopRendererReadySignal />);
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    first.unmount();
+    render(<DesktopRendererReadySignal />);
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(notifyRendererReady).toHaveBeenCalledTimes(1);
   });
 });

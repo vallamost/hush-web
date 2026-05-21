@@ -8,7 +8,7 @@
  * 4. BroadcastChannel unavailability degrades gracefully (isBlockedTab = false, app renders)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { renderHook } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -94,6 +94,7 @@ import App from './App';
 import { useSingleTab } from './hooks/useSingleTab';
 import { useBootController } from './hooks/useBootController.jsx';
 import { useAuth } from './contexts/AuthContext';
+import { __resetDesktopRendererReadyForTests } from './hooks/useDesktopShell.js';
 import { cleanup } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
@@ -275,10 +276,16 @@ describe('App - blocked-tab overlay', () => {
   beforeEach(() => {
     vi.useRealTimers();
     cleanup();
+    __resetDesktopRendererReadyForTests();
+    delete window.hushDesktop;
+    delete window.requestAnimationFrame;
   });
 
   afterEach(() => {
     cleanup();
+    __resetDesktopRendererReadyForTests();
+    delete window.hushDesktop;
+    delete window.requestAnimationFrame;
   });
 
   it('renders the blocked-tab overlay when isBlockedTab is true', () => {
@@ -400,6 +407,50 @@ describe('App - blocked-tab overlay', () => {
     expect(screen.queryByText('Home')).not.toBeInTheDocument();
     expect(screen.queryByText(/already open/i)).not.toBeInTheDocument();
     expect(container.querySelector('[style]')).toBeTruthy();
+  });
+
+  it('does not signal desktop renderer-ready while bootState is loading', async () => {
+    vi.useFakeTimers();
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({
+      bootState: 'loading',
+      user: null,
+      mergedGuilds: [],
+      guildsLoaded: false,
+    });
+
+    render(<MemoryRouter><App /></MemoryRouter>);
+
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+
+    expect(notifyRendererReady).not.toHaveBeenCalled();
+  });
+
+  it('signals desktop renderer-ready after a visible route commits', async () => {
+    const notifyRendererReady = vi.fn();
+    window.hushDesktop = { isDesktop: true, platform: 'darwin', notifyRendererReady };
+    window.requestAnimationFrame = (callback) => {
+      setTimeout(() => callback(performance.now()), 0);
+      return 1;
+    };
+    useSingleTab.mockReturnValue({ isBlockedTab: false, takeOver: vi.fn() });
+    useBootController.mockReturnValue({
+      bootState: 'needs_login',
+      user: null,
+      mergedGuilds: [],
+      guildsLoaded: true,
+    });
+
+    render(<MemoryRouter><App /></MemoryRouter>);
+    expect(await screen.findByText('Home')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(notifyRendererReady).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('calls takeOver when "Use this one instead" button is clicked', async () => {
