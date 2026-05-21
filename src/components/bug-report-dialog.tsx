@@ -196,8 +196,14 @@ export function BugReportDialog({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="bug-report-title">
-                  Title <span className="text-muted-foreground">(optional)</span>
+                <FieldLabel
+                  htmlFor="bug-report-title"
+                  className="flex items-baseline justify-between gap-2"
+                >
+                  <span>Title</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    optional
+                  </span>
                 </FieldLabel>
                 <Input
                   id="bug-report-title"
@@ -231,9 +237,14 @@ export function BugReportDialog({
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="bug-report-steps">
-                  Steps to reproduce{" "}
-                  <span className="text-muted-foreground">(optional)</span>
+                <FieldLabel
+                  htmlFor="bug-report-steps"
+                  className="flex items-baseline justify-between gap-2"
+                >
+                  <span>Steps</span>
+                  <span className="text-xs font-normal text-muted-foreground">
+                    optional
+                  </span>
                 </FieldLabel>
                 <Textarea
                   id="bug-report-steps"
@@ -261,36 +272,37 @@ export function BugReportDialog({
             </FieldGroup>
           </ScrollArea>
 
-          {feedback ? (
-            <p
-              role={phase === "error" ? "alert" : "status"}
-              className={
-                phase === "error"
-                  ? "px-6 text-sm text-destructive"
-                  : "px-6 text-sm text-muted-foreground"
-              }
-            >
-              {feedback}
-            </p>
-          ) : null}
-
-          <DialogFooter className="px-6 pb-6">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => onOpenChange(false)}
-              disabled={submitting}
-            >
-              {succeeded ? "Close" : "Cancel"}
-            </Button>
-            <Button type="submit" disabled={submitting || succeeded}>
-              {submitting
-                ? SUBMITTING_LABEL
-                : succeeded
-                  ? SUCCESS_LABEL
-                  : SEND_LABEL}
-            </Button>
-          </DialogFooter>
+          <div className="flex shrink-0 flex-col gap-3 border-t px-6 pt-4 pb-6">
+            {feedback ? (
+              <p
+                role={phase === "error" ? "alert" : "status"}
+                className={
+                  phase === "error"
+                    ? "text-sm text-destructive"
+                    : "text-sm text-muted-foreground"
+                }
+              >
+                {feedback}
+              </p>
+            ) : null}
+            <DialogFooter className="p-0">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+              >
+                {succeeded ? "Close" : "Cancel"}
+              </Button>
+              <Button type="submit" disabled={submitting || succeeded}>
+                {submitting
+                  ? SUBMITTING_LABEL
+                  : succeeded
+                    ? SUCCESS_LABEL
+                    : SEND_LABEL}
+              </Button>
+            </DialogFooter>
+          </div>
         </form>
       </DialogContent>
     </Dialog>
