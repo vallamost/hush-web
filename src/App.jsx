@@ -9,7 +9,7 @@ import { DesktopShell } from './components/desktop/DesktopShell.jsx';
 import { DesktopUpdateBoundary } from './components/desktop/DesktopUpdateBoundary.jsx';
 import { DesktopWindowFloorSync } from './components/desktop/DesktopWindowFloorSync.jsx';
 import { useSingleTab } from './hooks/useSingleTab';
-import { DesktopRendererReadySignal, useDesktopShell } from './hooks/useDesktopShell';
+import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
 import { Toaster } from './components/ui/sonner';
 import { UpdateRequiredDialog } from './components/UpdateRequiredDialog';
@@ -172,19 +172,6 @@ function TransparencyErrorScreen() {
   );
 }
 
-function VisibleRoute({ children }) {
-  return (
-    <>
-      {children}
-      <DesktopRendererReadySignal />
-    </>
-  );
-}
-
-function visibleRoute(element) {
-  return <VisibleRoute>{element}</VisibleRoute>;
-}
-
 // ── AppContent ────────────────────────────────────────────────────────────────
 
 /**
@@ -214,21 +201,21 @@ function AppContent() {
       <Suspense fallback={fallback}>
         <Routes>
           {/* Public routes - accessible without auth */}
-          <Route path="/join/:instance/:code" element={visibleRoute(<Invite />)} />
-          <Route path="/invite/:code" element={visibleRoute(<Invite />)} />
-          <Route path="/link-device" element={visibleRoute(<LinkDevice />)} />
+          <Route path="/join/:instance/:code" element={<Invite />} />
+          <Route path="/invite/:code" element={<Invite />} />
+          <Route path="/link-device" element={<LinkDevice />} />
           <Route path="/room/:roomName" element={<Navigate to="/" replace />} />
-          <Route path="/roadmap" element={visibleRoute(<RoadmapRoute />)} />
+          <Route path="/roadmap" element={<RoadmapRoute />} />
 
           {/* Everything else → login/PIN screen */}
-          <Route path="*" element={visibleRoute(<UnauthenticatedShell />)} />
+          <Route path="*" element={<UnauthenticatedShell />} />
         </Routes>
       </Suspense>
     );
   }
 
   if (bootState === 'transparency_error') {
-    return visibleRoute(<TransparencyErrorScreen />);
+    return <TransparencyErrorScreen />;
   }
 
   // ── Authenticated (ready or booted): full route tree ─────────────────────
@@ -241,28 +228,28 @@ function AppContent() {
           <Route path="/" element={<PostLoginRedirect />} />
 
           {/* DM landing / no-guild empty state */}
-          <Route path="/home" element={visibleRoute(<AuthenticatedApp />)} />
+          <Route path="/home" element={<AuthenticatedApp />} />
           <Route
             path="/home/:channelSlug"
-            element={visibleRoute(<AuthenticatedApp />)}
+            element={<AuthenticatedApp />}
           />
 
           {/* Guild discovery */}
-          <Route path="/explore" element={visibleRoute(<ExplorePage />)} />
+          <Route path="/explore" element={<ExplorePage />} />
 
           {/* Cross-instance invite */}
-          <Route path="/join/:instance/:code" element={visibleRoute(<Invite />)} />
+          <Route path="/join/:instance/:code" element={<Invite />} />
 
           {/* Same-instance invite (legacy path kept) */}
-          <Route path="/invite/:code" element={visibleRoute(<Invite />)} />
+          <Route path="/invite/:code" element={<Invite />} />
 
           {/* Device-link approval/new-device handoff */}
-          <Route path="/link-device" element={visibleRoute(<LinkDevice />)} />
+          <Route path="/link-device" element={<LinkDevice />} />
 
           {/* Instance-aware guild route: /:instance/:guildSlug/:channelSlug? */}
           <Route
             path="/:instance/:guildSlug/:channelSlug?"
-            element={visibleRoute(<AuthenticatedApp />)}
+            element={<AuthenticatedApp />}
           />
 
           {/* Legacy redirects */}
@@ -323,12 +310,7 @@ export default function App() {
     : 'generic';
 
   if (isBlockedTab) {
-    return (
-      <>
-        <BlockedTabView blockedFlow={blockedFlow} takeOver={takeOver} />
-        <DesktopRendererReadySignal />
-      </>
-    );
+    return <BlockedTabView blockedFlow={blockedFlow} takeOver={takeOver} />;
   }
 
   return (
