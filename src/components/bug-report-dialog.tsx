@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
@@ -38,6 +37,7 @@ import {
   type BugReportType,
 } from "@/lib/bugReport"
 import { getDesktopBridge } from "@/lib/desktopBridge"
+import type { DesktopRuntimeInfo } from "@/lib/desktopBridge"
 
 const TYPE_LABELS: Record<BugReportType, string> = {
   bug: "Bug",
@@ -66,6 +66,11 @@ export function BugReportDialog({
   lifecycleState,
   appSurface,
 }: BugReportDialogProps) {
+  const desktopBridge = React.useMemo(() => getDesktopBridge(), [])
+  const isRuntimeInfoReadable =
+    typeof desktopBridge?.getRuntimeInfo === "function"
+  const [desktopRuntimeInfo, setDesktopRuntimeInfo] =
+    React.useState<DesktopRuntimeInfo | null>(null)
   const [type, setType] = React.useState<BugReportType>("bug")
   const [title, setTitle] = React.useState("")
   const [description, setDescription] = React.useState("")
@@ -76,14 +81,35 @@ export function BugReportDialog({
   const [fieldError, setFieldError] =
     React.useState<{ field: string; message: string } | null>(null)
 
+  const telemetryDesktopBridge = React.useMemo(() => {
+    if (!desktopBridge) return null
+    if (!desktopRuntimeInfo) return desktopBridge
+    return {
+      ...desktopBridge,
+      platform: desktopRuntimeInfo.platform,
+      arch: desktopRuntimeInfo.arch,
+      osRelease: desktopRuntimeInfo.osRelease,
+    }
+  }, [desktopBridge, desktopRuntimeInfo])
+
   const telemetry: BugReportTelemetry = React.useMemo(
     () =>
       buildBugReportTelemetry({
+        appVersion:
+          desktopBridge && isRuntimeInfoReadable
+            ? (desktopRuntimeInfo?.appVersion ?? "pending")
+            : desktopRuntimeInfo?.appVersion,
         lifecycleState: lifecycleState ?? null,
         appSurface: appSurface ?? null,
-        desktopBridge: getDesktopBridge(),
+        desktopBridge: telemetryDesktopBridge,
       }),
-    [appSurface, lifecycleState]
+    [
+      appSurface,
+      desktopRuntimeInfo,
+      isRuntimeInfoReadable,
+      lifecycleState,
+      telemetryDesktopBridge,
+    ]
   )
 
   const telemetryPreview = React.useMemo(
@@ -102,13 +128,33 @@ export function BugReportDialog({
     setFieldError(null)
   }, [open])
 
+  React.useEffect(() => {
+    const getRuntimeInfo = desktopBridge?.getRuntimeInfo
+    if (!open || typeof getRuntimeInfo !== "function") return
+    let cancelled = false
+    void getRuntimeInfo()
+      .then((runtimeInfo) => {
+        if (!cancelled) {
+          setDesktopRuntimeInfo(runtimeInfo)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDesktopRuntimeInfo(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [desktopBridge, isRuntimeInfoReadable, open])
+
   const submitting = phase === "submitting"
   const succeeded = phase === "success"
+  const isTelemetryPending =
+    Boolean(desktopBridge) && isRuntimeInfoReadable && !desktopRuntimeInfo
 
   const handleSubmit = React.useCallback(
     async (event: React.FormEvent<HTMLFormElement>) => {
       event.preventDefault()
-      if (submitting || succeeded) return
+      if (submitting || succeeded || isTelemetryPending) return
       setPhase("submitting")
       setFeedback(null)
       setFieldError(null)
@@ -152,7 +198,16 @@ export function BugReportDialog({
         `Could not submit the report (server returned ${outcome.httpStatus}).`
       )
     },
-    [description, steps, submitting, succeeded, telemetry, title, type]
+    [
+      description,
+      isTelemetryPending,
+      steps,
+      submitting,
+      succeeded,
+      telemetry,
+      title,
+      type,
+    ]
   )
 
   const dialogDescription = succeeded
@@ -161,18 +216,20 @@ export function BugReportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-hidden p-0">
-        <DialogHeader className="px-6 pt-6">
+      <DialogContent
+        className="grid max-h-[calc(100dvh-2rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)] gap-0 overflow-hidden p-0"
+      >
+        <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle>Report a bug</DialogTitle>
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         <form
-          className="flex min-h-0 flex-1 flex-col gap-4"
+          className="grid min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden"
           onSubmit={handleSubmit}
         >
-          <ScrollArea className="min-h-0 flex-1 px-6">
-            <FieldGroup className="grid gap-4 pb-1 md:grid-cols-2">
+          <ScrollArea className="min-h-0 px-5">
+            <FieldGroup className="grid gap-4 px-1 py-1 md:grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="bug-report-type">Type</FieldLabel>
                 <Select
@@ -272,7 +329,7 @@ export function BugReportDialog({
             </FieldGroup>
           </ScrollArea>
 
-          <div className="flex shrink-0 flex-col gap-3 border-t px-6 pt-4 pb-6">
+          <div className="flex flex-col gap-3 px-6 pt-4 pb-6">
             {feedback ? (
               <p
                 role={phase === "error" ? "alert" : "status"}
@@ -285,7 +342,7 @@ export function BugReportDialog({
                 {feedback}
               </p>
             ) : null}
-            <DialogFooter className="p-0">
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <Button
                 type="button"
                 variant="ghost"
@@ -294,14 +351,17 @@ export function BugReportDialog({
               >
                 {succeeded ? "Close" : "Cancel"}
               </Button>
-              <Button type="submit" disabled={submitting || succeeded}>
+              <Button
+                type="submit"
+                disabled={submitting || succeeded || isTelemetryPending}
+              >
                 {submitting
                   ? SUBMITTING_LABEL
                   : succeeded
                     ? SUCCESS_LABEL
                     : SEND_LABEL}
               </Button>
-            </DialogFooter>
+            </div>
           </div>
         </form>
       </DialogContent>
