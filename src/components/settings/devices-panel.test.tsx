@@ -55,6 +55,7 @@ vi.mock("@/hooks/useAuth", () => ({
 const setTransparencyError = vi.fn()
 const identityKeyRef = { current: { publicKey: new Uint8Array([1, 2, 3]) } }
 const authState: { token: string | null } = { token: "tok" }
+const getReadableDeviceLabel = vi.fn(() => "Chrome on macOS")
 vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({
     token: authState.token,
@@ -64,7 +65,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 }))
 
 vi.mock("@/lib/deviceLabel", () => ({
-  getReadableDeviceLabel: () => "Chrome on macOS",
+  getReadableDeviceLabel: () => getReadableDeviceLabel(),
 }))
 
 vi.mock("@/lib/identityVault", () => ({
@@ -131,6 +132,7 @@ describe("DevicesPanel", () => {
     verifyOwnKey.mockClear()
     verifyOwnKey.mockResolvedValue({ ok: true })
     getDeviceId.mockReturnValue("device-current")
+    getReadableDeviceLabel.mockReturnValue("Chrome on macOS")
     authState.token = "tok"
   })
 
@@ -187,6 +189,27 @@ describe("DevicesPanel", () => {
     )
     expect(screen.getByText("Chrome on macOS")).toBeInTheDocument()
     expect(screen.getByText("iPhone")).toBeInTheDocument()
+  })
+
+  it("uses the local runtime label for the current device over a stale server label", async () => {
+    getReadableDeviceLabel.mockReturnValue("Desktop on macOS")
+    listDeviceKeys.mockResolvedValueOnce([
+      {
+        id: "row-1",
+        deviceId: "device-current",
+        label: "Chrome on macOS",
+        certifiedAt: "2026-01-01T00:00:00Z",
+        lastSeen: new Date().toISOString(),
+      },
+    ])
+
+    renderPanel(<DevicesPanel />)
+
+    await waitFor(() =>
+      expect(screen.getByText(/this device/i)).toBeInTheDocument()
+    )
+    expect(screen.getByText("Desktop on macOS")).toBeInTheDocument()
+    expect(screen.queryByText("Chrome on macOS")).not.toBeInTheDocument()
   })
 
   it("shows a short readable fallback for unlabeled non-current devices", async () => {

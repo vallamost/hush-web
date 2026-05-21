@@ -374,8 +374,8 @@ function getDeviceStaleness(
 }
 
 function getDeviceDisplayLabel(device: DeviceRow, isCurrent: boolean): string {
-  if (device.label) return device.label
   if (isCurrent) return getReadableDeviceLabel()
+  if (device.label) return device.label
   // Devices registered before the label-on-certify wiring landed
   // surface their raw deviceId hash (~64 chars), which is unreadable.
   // Fall back to a short identifier so the row is still
