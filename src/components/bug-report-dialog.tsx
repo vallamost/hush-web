@@ -11,8 +11,6 @@ import {
 } from "@/components/ui/dialog"
 import {
   Field,
-  FieldContent,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -21,10 +19,12 @@ import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 
 import {
@@ -161,120 +161,120 @@ export function BugReportDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-2xl flex-col overflow-hidden p-0">
+        <DialogHeader className="px-6 pt-6">
           <DialogTitle>Report a bug</DialogTitle>
           <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
-        <form className="flex flex-col gap-4" onSubmit={handleSubmit}>
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="bug-report-type">Type</FieldLabel>
-              <Select
-                value={type}
-                onValueChange={(value) => setType(value as BugReportType)}
-                disabled={submitting || succeeded}
-              >
-                <SelectTrigger id="bug-report-type" aria-label="Report type">
-                  <SelectValue />
-                </SelectTrigger>
-                {/* `position="popper"` anchors the menu to the trigger
-                    so the dropdown's vertical position does not shift
-                    based on which option is currently selected. */}
-                <SelectContent position="popper" sideOffset={4}>
-                  {BUG_REPORT_TYPES.map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {TYPE_LABELS[value]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+        <form
+          className="flex min-h-0 flex-1 flex-col gap-4"
+          onSubmit={handleSubmit}
+        >
+          <ScrollArea className="min-h-0 flex-1 px-6">
+            <FieldGroup className="grid gap-4 pb-1 md:grid-cols-2">
+              <Field>
+                <FieldLabel htmlFor="bug-report-type">Type</FieldLabel>
+                <Select
+                  value={type}
+                  onValueChange={(value) => setType(value as BugReportType)}
+                  disabled={submitting || succeeded}
+                >
+                  <SelectTrigger id="bug-report-type" aria-label="Report type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent position="popper" sideOffset={4}>
+                    <SelectGroup>
+                      {BUG_REPORT_TYPES.map((value) => (
+                        <SelectItem key={value} value={value}>
+                          {TYPE_LABELS[value]}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+              </Field>
 
-            <Field>
-              <FieldLabel htmlFor="bug-report-title">
-                Title <span className="text-muted-foreground">(optional)</span>
-              </FieldLabel>
-              <Input
-                id="bug-report-title"
-                value={title}
-                onChange={(event) => setTitle(event.target.value)}
-                disabled={submitting || succeeded}
-                maxLength={120}
-                placeholder="Short summary"
-              />
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="bug-report-title">
+                  Title <span className="text-muted-foreground">(optional)</span>
+                </FieldLabel>
+                <Input
+                  id="bug-report-title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  disabled={submitting || succeeded}
+                  maxLength={120}
+                  placeholder="Short summary"
+                />
+              </Field>
 
-            <Field>
-              <FieldLabel htmlFor="bug-report-description">Description</FieldLabel>
-              <Textarea
-                id="bug-report-description"
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                disabled={submitting || succeeded}
-                required
-                rows={5}
-                maxLength={4000}
-                aria-invalid={fieldError?.field === "description" || undefined}
-                placeholder="What happened? What did you expect to happen?"
-                className="h-32 resize-none overflow-auto [field-sizing:fixed]"
-              />
-              {fieldError?.field === "description" ? (
-                <FieldError>{fieldError.message}</FieldError>
-              ) : null}
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="bug-report-description">
+                  Description
+                </FieldLabel>
+                <Textarea
+                  id="bug-report-description"
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  disabled={submitting || succeeded}
+                  required
+                  rows={4}
+                  maxLength={4000}
+                  aria-invalid={fieldError?.field === "description" || undefined}
+                  placeholder="What happened? What did you expect to happen?"
+                  className="h-28 resize-none overflow-auto [field-sizing:fixed]"
+                />
+                {fieldError?.field === "description" ? (
+                  <FieldError>{fieldError.message}</FieldError>
+                ) : null}
+              </Field>
 
-            <Field>
-              <FieldLabel htmlFor="bug-report-steps">
-                Steps to reproduce{" "}
-                <span className="text-muted-foreground">(optional)</span>
-              </FieldLabel>
-              <Textarea
-                id="bug-report-steps"
-                value={steps}
-                onChange={(event) => setSteps(event.target.value)}
-                disabled={submitting || succeeded}
-                rows={4}
-                maxLength={2000}
-                placeholder={"1. ...\n2. ...\n3. ..."}
-                className="h-24 resize-none overflow-auto [field-sizing:fixed]"
-              />
-            </Field>
+              <Field>
+                <FieldLabel htmlFor="bug-report-steps">
+                  Steps to reproduce{" "}
+                  <span className="text-muted-foreground">(optional)</span>
+                </FieldLabel>
+                <Textarea
+                  id="bug-report-steps"
+                  value={steps}
+                  onChange={(event) => setSteps(event.target.value)}
+                  disabled={submitting || succeeded}
+                  rows={4}
+                  maxLength={2000}
+                  placeholder={"1. ...\n2. ...\n3. ..."}
+                  className="h-28 resize-none overflow-auto [field-sizing:fixed]"
+                />
+              </Field>
 
-            <Field>
-              <FieldContent>
+              <Field className="md:col-span-2">
                 <FieldLabel htmlFor="bug-report-telemetry">
                   Anonymous metadata
                 </FieldLabel>
-                <FieldDescription>
-                  Exactly the JSON below is attached to your report. No
-                  account, contact, or message data is included.
-                </FieldDescription>
-              </FieldContent>
-              <pre
-                id="bug-report-telemetry"
-                className="max-h-48 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs leading-snug"
-              >
-                {telemetryPreview}
-              </pre>
-            </Field>
-          </FieldGroup>
+                <pre
+                  id="bug-report-telemetry"
+                  className="max-h-28 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs leading-snug"
+                >
+                  {telemetryPreview}
+                </pre>
+              </Field>
+            </FieldGroup>
+          </ScrollArea>
 
           {feedback ? (
             <p
               role={phase === "error" ? "alert" : "status"}
               className={
                 phase === "error"
-                  ? "text-sm text-destructive"
-                  : "text-sm text-muted-foreground"
+                  ? "px-6 text-sm text-destructive"
+                  : "px-6 text-sm text-muted-foreground"
               }
             >
               {feedback}
             </p>
           ) : null}
 
-          <DialogFooter>
+          <DialogFooter className="px-6 pb-6">
             <Button
               type="button"
               variant="ghost"

@@ -36,13 +36,13 @@ export function BottomDock({
         data-slot="bottom-dock-panel"
         className="gap-0 rounded-lg border-transparent py-0 shadow-none ring-0"
       >
-        <div className="flex items-center justify-end px-1 pt-1">
-          <GlobalBugReportButton className="size-7 shrink-0 text-muted-foreground hover:text-foreground" />
-        </div>
         <UserMenu
           user={user}
           onOpenSettings={onOpenUserSettings}
           onSignOut={onSignOut}
+          utilityAction={
+            <GlobalBugReportButton className="size-9 shrink-0 text-muted-foreground hover:text-foreground" />
+          }
         />
       </Card>
     </div>

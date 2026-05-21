@@ -40,7 +40,7 @@ export function GlobalBugReportButton({
             onClick={() => setOpen(true)}
             className={className}
           >
-            <BugIcon className="size-4" aria-hidden />
+            <BugIcon aria-hidden />
           </Button>
         </TooltipTrigger>
         <TooltipContent side="right">Report a bug</TooltipContent>
