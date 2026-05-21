@@ -24,6 +24,19 @@ export function useDesktopShell() {
       : 'true';
     const previous = root.dataset.desktop ?? null;
     root.dataset.desktop = marker;
+
+    // Signal the main process that the desktop shell is mounted and the
+    // base classes are applied, so it can reveal the cold-launch window
+    // without a flash of unstyled UI. Fire-and-forget: main is idempotent
+    // and a missing method (older desktop builds) silently degrades to
+    // the legacy `ready-to-show` reveal path.
+    if (typeof api.notifyRendererReady === 'function') {
+      try {
+        api.notifyRendererReady();
+      } catch {
+        // ignore preload bridge errors
+      }
+    }
     return () => {
       if (previous === null) {
         delete root.dataset.desktop;

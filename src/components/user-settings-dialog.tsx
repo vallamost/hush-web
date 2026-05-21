@@ -281,9 +281,8 @@ function LogoutPanel({
 // re-authenticate. The MLS group keys are downstream of this: locking
 // the vault drops the wrapping key, which makes the encrypted at-rest
 // vault blob unusable until the next unlock. Values mirror the shape
-// `useAuth.updateVaultTimeout` accepts; the labels match what the
-// legacy UserSettingsModal exposed so returning users see the same
-// choices.
+// `useAuth.updateVaultTimeout` accepts. Labels are resolved per runtime
+// so the desktop shell never exposes browser-only wording.
 type VaultTimeoutValue =
   | "browser_close"
   | "refresh"
@@ -294,9 +293,20 @@ type VaultTimeoutValue =
   | "4h"
   | "never"
 
-const VAULT_TIMEOUT_OPTIONS: { value: VaultTimeoutValue; label: string }[] = [
+const WEB_VAULT_TIMEOUT_OPTIONS: { value: VaultTimeoutValue; label: string }[] = [
   { value: "browser_close", label: "On browser close" },
-  { value: "refresh", label: "On refresh" },
+  { value: "refresh", label: "On page refresh" },
+  { value: "1m", label: "1 minute" },
+  { value: "15m", label: "15 minutes" },
+  { value: "30m", label: "30 minutes" },
+  { value: "1h", label: "1 hour" },
+  { value: "4h", label: "4 hours" },
+  { value: "never", label: "Never" },
+]
+
+const DESKTOP_VAULT_TIMEOUT_OPTIONS: { value: VaultTimeoutValue; label: string }[] = [
+  { value: "browser_close", label: "On app close" },
+  { value: "refresh", label: "On app reload" },
   { value: "1m", label: "1 minute" },
   { value: "15m", label: "15 minutes" },
   { value: "30m", label: "30 minutes" },
@@ -623,6 +633,13 @@ function SecurityPanel() {
   const [vaultTimeout, setVaultTimeout] = React.useState<VaultTimeoutValue>(
     () => readStoredVaultTimeout(userId)
   )
+  const isDesktopRuntime =
+    typeof window !== "undefined" &&
+    (window as unknown as { hushDesktop?: { isDesktop?: boolean } }).hushDesktop
+      ?.isDesktop === true
+  const vaultTimeoutOptions = isDesktopRuntime
+    ? DESKTOP_VAULT_TIMEOUT_OPTIONS
+    : WEB_VAULT_TIMEOUT_OPTIONS
 
   // Refresh when the active user changes (account switch within a session).
   React.useEffect(() => {
@@ -644,8 +661,8 @@ function SecurityPanel() {
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">Security</h2>
         <p className="text-sm text-muted-foreground">
-          Control how long your unlocked vault survives across reloads
-          and tab closes before requiring your PIN or passphrase again.
+          Control how long your unlocked vault survives before requiring
+          your PIN or passphrase again.
         </p>
       </div>
 
@@ -671,7 +688,7 @@ function SecurityPanel() {
                 <SelectValue placeholder="Select timeout" />
               </SelectTrigger>
               <SelectContent>
-                {VAULT_TIMEOUT_OPTIONS.map((opt) => (
+                {vaultTimeoutOptions.map((opt) => (
                   <SelectItem key={opt.value} value={opt.value}>
                     {opt.label}
                   </SelectItem>
@@ -679,7 +696,7 @@ function SecurityPanel() {
               </SelectContent>
             </Select>
             <span className="text-xs text-muted-foreground">
-              {describeVaultTimeoutPolicy(vaultTimeout)}
+              {describeVaultTimeoutPolicy(vaultTimeout, isDesktopRuntime)}
             </span>
             {vaultTimeout === "never" ? (
               <span className="text-xs text-destructive">
@@ -700,20 +717,32 @@ function SecurityPanel() {
  * Z" so a returning user can read what the picked option actually
  * delivers without having to mentally invert.
  */
-function describeVaultTimeoutPolicy(value: VaultTimeoutValue): string {
+function describeVaultTimeoutPolicy(
+  value: VaultTimeoutValue,
+  isDesktopRuntime: boolean
+): string {
+  const closeTarget = isDesktopRuntime
+    ? "closing Hush"
+    : "closing the last tab of this account"
+  const refreshTarget = isDesktopRuntime ? "app reload" : "page refresh"
   switch (value) {
     case "never":
-      return "Survives reloads, tab closes, and mobile background. Locks only on sign out, manual lock, or PIN change."
+      return isDesktopRuntime
+        ? "Survives app reloads and app closes. Locks only on sign out, manual lock, or PIN change."
+        : "Survives reloads, tab closes, and mobile background. Locks only on sign out, manual lock, or PIN change."
     case "browser_close":
-      return "Survives soft refresh in the same tab. Locks when the last tab of this account closes."
+      return `Survives ${refreshTarget}. Locks on ${closeTarget}.`
     case "refresh":
-      return "Locks on every reload — re-enter your PIN each time the page refreshes."
+      return `Locks on every ${refreshTarget}; re-enter your PIN each time.`
     case "1m":
     case "15m":
     case "30m":
     case "1h":
     case "4h": {
-      const label = VAULT_TIMEOUT_OPTIONS.find((o) => o.value === value)?.label
+      const options = isDesktopRuntime
+        ? DESKTOP_VAULT_TIMEOUT_OPTIONS
+        : WEB_VAULT_TIMEOUT_OPTIONS
+      const label = options.find((o) => o.value === value)?.label
       return `Locks after ${label?.toLowerCase() ?? "the configured idle time"} of inactivity. Survives reloads while inside the deadline.`
     }
     default:

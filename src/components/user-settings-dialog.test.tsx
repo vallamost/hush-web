@@ -324,6 +324,35 @@ describe("UserSettingsDialog", () => {
     ).toHaveTextContent(/1 hour/i)
   })
 
+  it("uses desktop copy for vault timeout labels inside the desktop shell", async () => {
+    Object.defineProperty(window, "hushDesktop", {
+      configurable: true,
+      value: { isDesktop: true, platform: "darwin" },
+    })
+    mockUseAuth.mockReturnValue({
+      user: { id: "u1" },
+      updateVaultTimeout: vi.fn(),
+    })
+    mockGetVaultConfig.mockReturnValue({ timeout: "browser_close", pinType: "pin" })
+
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const u = userEvent.setup()
+    await u.click(screen.getByRole("button", { name: /^security$/i }))
+
+    expect(
+      screen.getByRole("combobox", { name: /vault timeout/i })
+    ).toHaveTextContent(/on app close/i)
+    expect(screen.getByText(/locks on closing hush/i)).toBeInTheDocument()
+    expect(screen.queryByText(/browser close/i)).not.toBeInTheDocument()
+  })
+
   it("exposes a Devices section under Account that activates DevicesPanel", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "u1" },

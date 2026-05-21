@@ -14,8 +14,19 @@ import type {
 export interface DesktopBridge {
   readonly isDesktop: true
   readonly platform: DesktopPlatform
+  readonly arch?: string
+  readonly osRelease?: string
+  getAppVersion?: () => Promise<string>
+  getRuntimeInfo?: () => Promise<DesktopRuntimeInfo>
   setGlassMaterial?: (material: GlassMaterial) => Promise<void>
   getGlassCapabilities?: () => Promise<GlassCapabilities>
+}
+
+export interface DesktopRuntimeInfo {
+  readonly appVersion: string
+  readonly platform: DesktopPlatform
+  readonly arch: string
+  readonly osRelease: string
 }
 
 /**
