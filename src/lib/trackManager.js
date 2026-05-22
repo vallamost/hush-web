@@ -16,6 +16,30 @@ import {
 } from '../utils/constants';
 
 /**
+ * Stop a LiveKit local track and its underlying MediaStreamTrack.
+ *
+ * LiveKit's wrapper `stop()` should release capture, but Electron/macOS can
+ * keep the camera device active for a few seconds if the wrapped native track
+ * remains live through a disconnect race. Stopping both layers is idempotent
+ * and keeps teardown deterministic.
+ *
+ * @param {unknown} track
+ */
+export function stopLocalMediaTrack(track) {
+  if (!track || typeof track !== 'object') return;
+  const maybeTrack = /** @type {{ stop?: () => void, mediaStreamTrack?: { stop?: () => void }, track?: { stop?: () => void } }} */ (track);
+  if (typeof maybeTrack.stop === 'function') {
+    try { maybeTrack.stop(); } catch { /* teardown */ }
+  }
+  if (typeof maybeTrack.mediaStreamTrack?.stop === 'function') {
+    try { maybeTrack.mediaStreamTrack.stop(); } catch { /* teardown */ }
+  }
+  if (typeof maybeTrack.track?.stop === 'function') {
+    try { maybeTrack.track.stop(); } catch { /* teardown */ }
+  }
+}
+
+/**
  * Registers room event listeners for remote track and screen share updates.
  * @param {import('livekit-client').Room} room
  * @param {{ remoteTracksRef: import('react').MutableRefObject<Map>, availableScreensRef: import('react').MutableRefObject<Map>, watchedScreensRef: import('react').MutableRefObject<Set> }} refs
@@ -279,7 +303,7 @@ export async function publishWebcam(room, refs, deviceId = null) {
 export async function unpublishWebcam(room, refs) {
   for (const [trackSid, info] of refs.localTracksRef.current.entries()) {
     if (info.source === MEDIA_SOURCES.WEBCAM) {
-      info.track.stop();
+      stopLocalMediaTrack(info.track);
       await room.localParticipant.unpublishTrack(info.track);
       refs.localTracksRef.current.delete(trackSid);
     }
