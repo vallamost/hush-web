@@ -3,6 +3,7 @@ import {
   BellIcon,
   CircleUserIcon,
   HelpCircleIcon,
+  InfoIcon,
   KeyboardIcon,
   LanguagesIcon,
   LockIcon,
@@ -67,6 +68,7 @@ import {
 } from "@/lib/desktopBridge"
 import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
 import { HelpPanel } from "@/components/settings/help-panel"
+import { DesktopUpdatePanel } from "@/components/settings/desktop-update-panel"
 
 interface UserAccountInfo {
   displayName: string
@@ -143,6 +145,13 @@ export function UserSettingsDialog({
           onRequestClose={() => onOpenChange(false)}
         />
       ),
+    },
+    {
+      id: "general",
+      groupId: "app",
+      label: "General",
+      icon: <InfoIcon />,
+      content: <DesktopUpdatePanel />,
     },
     {
       id: "appearance",

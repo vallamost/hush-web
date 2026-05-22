@@ -696,8 +696,20 @@ export function AuthenticatedApp() {
         toast.message("Update check skipped. Try again when the network is available.")
         return
       }
-      if (state.phase === "checking" || state.phase === "downloading" || state.phase === "downloaded") {
-        toast.message("Desktop update found. Installing...")
+      if (state.phase === "ready") {
+        toast.message("Update ready. Restart from Preferences > General.")
+        return
+      }
+      if (
+        state.phase === "checking" ||
+        state.phase === "downloading" ||
+        state.phase === "preparing"
+      ) {
+        toast.message("Desktop update found. Downloading...")
+        return
+      }
+      if (state.phase === "downloaded") {
+        toast.message("Restarting to finish update...")
       }
     } catch {
       toast.error("Could not check for updates.")
