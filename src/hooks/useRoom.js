@@ -30,6 +30,7 @@ import {
   switchScreenSource as trackSwitchScreenSource,
   changeQuality as trackChangeQuality,
   publishWebcam as trackPublishWebcam,
+  stopLocalMediaTrack,
   unpublishWebcam as trackUnpublishWebcam,
   watchScreen as trackWatchScreen,
   unwatchScreen as trackUnwatchScreen,
@@ -841,9 +842,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       const localTracksMap = localTracksRef.current;
       if (localTracksMap && typeof localTracksMap.forEach === 'function') {
         localTracksMap.forEach((info) => {
-          if (info?.track && typeof info.track.stop === 'function') {
-            info.track.stop();
-          }
+          stopLocalMediaTrack(info?.track);
         });
       }
 
