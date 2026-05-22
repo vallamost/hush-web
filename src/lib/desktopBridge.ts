@@ -18,6 +18,8 @@ export interface DesktopBridge {
   readonly osRelease?: string
   getAppVersion?: () => Promise<string>
   getRuntimeInfo?: () => Promise<DesktopRuntimeInfo>
+  checkForDesktopUpdates?: () => Promise<DesktopUpdateState>
+  installDesktopUpdate?: () => Promise<DesktopUpdateState>
   setGlassMaterial?: (material: GlassMaterial) => Promise<void>
   getGlassCapabilities?: () => Promise<GlassCapabilities>
 }
@@ -27,6 +29,22 @@ export interface DesktopRuntimeInfo {
   readonly platform: DesktopPlatform
   readonly arch: string
   readonly osRelease: string
+  readonly electronVersion?: string
+}
+
+export interface DesktopUpdateProgress {
+  readonly percent: number
+  readonly transferred: number
+  readonly total: number
+  readonly bytesPerSecond: number
+}
+
+export interface DesktopUpdateState {
+  readonly phase: string
+  readonly currentVersion: string
+  readonly targetVersion: string | null
+  readonly progress: DesktopUpdateProgress | null
+  readonly error: string | null
 }
 
 /**
