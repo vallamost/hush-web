@@ -3,11 +3,27 @@ import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button.tsx"
+import { scheduleBodyPointerEventsRestore } from "@/lib/radixPointerEvents"
 
 function AlertDialog({
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open)
+      if (!open) scheduleBodyPointerEventsRestore()
+    },
+    [onOpenChange]
+  )
+
+  return (
+    <AlertDialogPrimitive.Root
+      data-slot="alert-dialog"
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function AlertDialogTrigger({

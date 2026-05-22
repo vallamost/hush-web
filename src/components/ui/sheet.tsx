@@ -5,10 +5,28 @@ import { Dialog as SheetPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button.tsx"
+import { scheduleBodyPointerEventsRestore } from "@/lib/radixPointerEvents"
 import { XIcon } from "lucide-react"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+function Sheet({
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open)
+      if (!open) scheduleBodyPointerEventsRestore()
+    },
+    [onOpenChange]
+  )
+
+  return (
+    <SheetPrimitive.Root
+      data-slot="sheet"
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function SheetTrigger({

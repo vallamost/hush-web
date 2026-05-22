@@ -3,12 +3,28 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button.tsx"
+import { scheduleBodyPointerEventsRestore } from "@/lib/radixPointerEvents"
 import { XIcon } from "lucide-react"
 
 function Dialog({
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
-  return <DialogPrimitive.Root data-slot="dialog" {...props} />
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open)
+      if (!open) scheduleBodyPointerEventsRestore()
+    },
+    [onOpenChange]
+  )
+
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function DialogTrigger({

@@ -2,12 +2,30 @@ import * as React from "react"
 import { ContextMenu as ContextMenuPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { scheduleBodyPointerEventsRestore } from "@/lib/radixPointerEvents"
 import { ChevronRightIcon, CheckIcon } from "lucide-react"
 
 function ContextMenu({
+  modal = false,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof ContextMenuPrimitive.Root>) {
-  return <ContextMenuPrimitive.Root data-slot="context-menu" {...props} />
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open)
+      if (!open) scheduleBodyPointerEventsRestore()
+    },
+    [onOpenChange]
+  )
+
+  return (
+    <ContextMenuPrimitive.Root
+      data-slot="context-menu"
+      modal={modal}
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function ContextMenuTrigger({

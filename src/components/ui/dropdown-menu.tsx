@@ -4,12 +4,30 @@ import * as React from "react"
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
+import { scheduleBodyPointerEventsRestore } from "@/lib/radixPointerEvents"
 import { CheckIcon, ChevronRightIcon } from "lucide-react"
 
 function DropdownMenu({
+  modal = false,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+  const handleOpenChange = React.useCallback(
+    (open: boolean) => {
+      onOpenChange?.(open)
+      if (!open) scheduleBodyPointerEventsRestore()
+    },
+    [onOpenChange]
+  )
+
+  return (
+    <DropdownMenuPrimitive.Root
+      data-slot="dropdown-menu"
+      modal={modal}
+      onOpenChange={handleOpenChange}
+      {...props}
+    />
+  )
 }
 
 function DropdownMenuPortal({
