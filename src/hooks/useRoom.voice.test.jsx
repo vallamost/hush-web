@@ -214,6 +214,16 @@ vi.mock('../lib/trackManager', () => ({
   unpublishWebcam: vi.fn(),
   watchScreen: vi.fn(),
   unwatchScreen: vi.fn(),
+  // HUSHHQ-14: deterministic teardown helper. Mirrors the real
+  // implementation closely enough — clears every entry in the
+  // ref so tests can assert post-teardown state without driving
+  // real LiveKit tracks.
+  releaseLocalCaptureTracks: vi.fn((localTracksRef) => {
+    const map = localTracksRef?.current;
+    if (!map || typeof map.clear !== 'function') return;
+    map.clear();
+  }),
+  stopLocalMediaTrack: vi.fn(),
 }));
 
 // Mock micProcessing exports used by useRoom

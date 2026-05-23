@@ -205,6 +205,23 @@ const WS_MESSAGE_SCHEMAS = new Map([
       type: z.literal("key_packages.low"),
     }).passthrough(),
   ],
+  [
+    "instance_updated",
+    z.object({
+      type: z.literal("instance_updated"),
+      name: OptionalString,
+      iconUrl: z.string().nullable().optional(),
+      icon_url: z.string().nullable().optional(),
+      registrationMode: OptionalString,
+      registration_mode: OptionalString,
+      guild_discovery: OptionalString,
+      server_creation_policy: OptionalString,
+      screen_share_resolution_cap: OptionalString,
+      max_attachment_bytes: z.number().optional(),
+      message_retention_days: z.number().optional(),
+      voice_key_rotation_hours: z.number().optional(),
+    }),
+  ],
 ])
 
 function formatIssues(error) {

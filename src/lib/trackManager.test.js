@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { stopLocalMediaTrack } from './trackManager';
+import { releaseLocalCaptureTracks, stopLocalMediaTrack } from './trackManager';
 
 describe('stopLocalMediaTrack', () => {
   it('stops both LiveKit wrapper and underlying media stream track', () => {
@@ -38,5 +38,39 @@ describe('stopLocalMediaTrack', () => {
         },
       }),
     ).not.toThrow();
+  });
+});
+
+describe('releaseLocalCaptureTracks', () => {
+  it('stops every local track and clears the ref map', () => {
+    const webcamStop = vi.fn();
+    const screenWrapperStop = vi.fn();
+    const screenNativeStop = vi.fn();
+    const localTracksRef = {
+      current: new Map([
+        ['webcam', { track: { stop: webcamStop } }],
+        [
+          'screen',
+          {
+            track: {
+              stop: screenWrapperStop,
+              mediaStreamTrack: { stop: screenNativeStop },
+            },
+          },
+        ],
+      ]),
+    };
+
+    releaseLocalCaptureTracks(localTracksRef);
+
+    expect(webcamStop).toHaveBeenCalledTimes(1);
+    expect(screenWrapperStop).toHaveBeenCalledTimes(1);
+    expect(screenNativeStop).toHaveBeenCalledTimes(1);
+    expect(localTracksRef.current.size).toBe(0);
+  });
+
+  it('is safe when the ref is missing or already empty', () => {
+    expect(() => releaseLocalCaptureTracks(null)).not.toThrow();
+    expect(() => releaseLocalCaptureTracks({ current: new Map() })).not.toThrow();
   });
 });

@@ -117,11 +117,13 @@ vi.mock("@livekit/components-styles", () => ({}))
 // control callbacks.
 const controlsProps: {
   onToggleScreen?: () => void
+  onToggleWebcam?: () => void
 } = {}
 
 vi.mock("@/components/voice/voice-controls-bar", () => ({
   VoiceControlsBar: (props: typeof controlsProps) => {
     controlsProps.onToggleScreen = props.onToggleScreen
+    controlsProps.onToggleWebcam = props.onToggleWebcam
     return null
   },
 }))
@@ -240,6 +242,7 @@ beforeEach(async () => {
   pickerHandlers.camera = null
   pickerHandlers.output = null
   controlsProps.onToggleScreen = undefined
+  controlsProps.onToggleWebcam = undefined
   qualityDialogProps.open = undefined
   prejoinProps.onDevicePrefsChange = undefined
   await clearVoiceDevicePrefs("user-1").catch(() => {})
@@ -356,10 +359,14 @@ describe("VoiceChannelView — auto-publish with skip prejoin + default device",
     })
   })
 
-  it("publishes the system default webcam when videoDeviceId is null + videoEnabled is true", async () => {
+  // HUSHHQ-14: camera enablement is session-local. Persisted
+  // `videoEnabled: true` (including historical records from before
+  // this fix) must NOT auto-start the webcam on join. Users have
+  // to flip the camera on explicitly each session.
+  it("does not auto-publish the webcam even when persisted videoEnabled is true", async () => {
     await saveVoiceDevicePrefs("user-1", {
       audioDeviceId: null,
-      videoDeviceId: null,
+      videoDeviceId: "cam-saved",
       outputDeviceId: null,
       audioEnabled: false,
       videoEnabled: true,
@@ -368,9 +375,47 @@ describe("VoiceChannelView — auto-publish with skip prejoin + default device",
 
     await mount()
 
-    await waitFor(() => {
-      expect(roomMock.api.publishWebcam).toHaveBeenCalledWith(null)
+    // Wait long enough for any auto-publish effect to settle.
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(roomMock.api.publishWebcam).not.toHaveBeenCalled()
+  })
+
+  it("does not auto-publish the webcam when videoEnabled is false", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: false,
+      videoEnabled: false,
+      dontAskAgain: true,
     })
+
+    await mount()
+
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(roomMock.api.publishWebcam).not.toHaveBeenCalled()
+  })
+
+  it("publishes the webcam when the user explicitly toggles it on after join", async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: "cam-saved",
+      outputDeviceId: null,
+      audioEnabled: false,
+      videoEnabled: true,
+      dontAskAgain: true,
+    })
+
+    await mount()
+    await new Promise((resolve) => setTimeout(resolve, 25))
+    expect(roomMock.api.publishWebcam).not.toHaveBeenCalled()
+
+    expect(controlsProps.onToggleWebcam).toBeTypeOf("function")
+    await act(async () => {
+      await controlsProps.onToggleWebcam?.()
+    })
+
+    expect(roomMock.api.publishWebcam).toHaveBeenCalledWith("cam-saved")
   })
 
   it("publishes a saved mic id when one is persisted", async () => {

@@ -432,6 +432,27 @@ export function useInstances() {
     wsClient.on('server_deleted', refreshOnEvent);
     wsClient.on('member_joined', refreshOnEvent);
 
+    // Live-apply admin instance_config changes broadcast by the server
+    // so attachment limits, screen-share caps, registration mode, and
+    // guild discovery flip without a page refresh. Merge into the
+    // cached handshakeData per instance (NOT cross-instance) so each
+    // instance's runtime config stays scoped to its origin. Unknown /
+    // extra fields are passed through; the schema strips the `type`
+    // discriminator before merge so it cannot poison handshakeData.
+    const handleInstanceUpdated = (data) => {
+      const entry = instancesRef.current.get(instanceUrl);
+      if (!entry) return;
+      const merged = { ...(entry.handshakeData ?? {}) };
+      for (const [key, value] of Object.entries(data ?? {})) {
+        if (key === 'type') continue;
+        if (value === undefined) continue;
+        merged[key] = value;
+      }
+      entry.handshakeData = merged;
+      flushState();
+    };
+    wsClient.on('instance_updated', handleInstanceUpdated);
+
     // After member_left, refresh guilds then silently disconnect if the user
     // has no remaining servers on this instance (auto-cleanup, no confirmation).
     const handleMemberLeft = async () => {

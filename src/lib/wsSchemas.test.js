@@ -125,6 +125,45 @@ describe("wsSchemas", () => {
     expect(isKnownWsMessageType("future.event")).toBe(false)
   })
 
+  it("accepts a full instance_updated payload with all live-config fields", () => {
+    const parsed = parseWsMessage({
+      type: "instance_updated",
+      name: "Hush",
+      iconUrl: null,
+      registrationMode: "invite_only",
+      guild_discovery: "allowed",
+      server_creation_policy: "open",
+      screen_share_resolution_cap: "720p",
+      max_attachment_bytes: 1234567,
+      message_retention_days: 90,
+    })
+    expect(parsed.ok).toBe(true)
+    expect(parsed.data).toMatchObject({
+      type: "instance_updated",
+      max_attachment_bytes: 1234567,
+      screen_share_resolution_cap: "720p",
+    })
+  })
+
+  it("rejects instance_updated frames with malformed numeric fields", () => {
+    const parsed = parseWsMessage({
+      type: "instance_updated",
+      max_attachment_bytes: "not-a-number",
+    })
+    expect(parsed.ok).toBe(false)
+    expect(parsed.reason).toBe("schema")
+  })
+
+  it("strips unexpected fields from instance_updated frames", () => {
+    const parsed = parseWsMessage({
+      type: "instance_updated",
+      max_attachment_bytes: 1234,
+      unexpected_runtime_field: "ignored",
+    })
+    expect(parsed.ok).toBe(true)
+    expect(parsed.data.unexpected_runtime_field).toBeUndefined()
+  })
+
   it("has a schema for every server-sourced wsClient subscription", () => {
     const missing = subscribedWsEventTypes().filter(
       (type) => !TRANSPORT_EVENT_TYPES.has(type) && !isKnownWsMessageType(type)

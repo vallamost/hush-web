@@ -722,6 +722,77 @@ describe('useInstances', () => {
     });
   });
 
+  // HUSHHQ-14: server emits `instance_updated` after admin writes
+  // public instance_config fields (attachment limits, screen-share
+  // cap, registration mode, etc.). The hook must merge those into
+  // the per-instance handshakeData so consumers re-derive runtime
+  // policy without a page refresh.
+  it('merges instance_updated payloads into per-instance handshakeData', async () => {
+    const { useInstances } = await import('./useInstances.js');
+    setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+
+    let instanceUpdatedHandler = null;
+    mockOn.mockImplementation((event, handler) => {
+      if (event === 'instance_updated') instanceUpdatedHandler = handler;
+    });
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.bootInstance(INSTANCE_A);
+    });
+
+    await waitFor(() => {
+      expect(result.current.instanceStates.get(INSTANCE_A)?.connectionState).toBe('connected');
+    });
+
+    expect(typeof instanceUpdatedHandler).toBe('function');
+
+    await act(async () => {
+      instanceUpdatedHandler({
+        type: 'instance_updated',
+        max_attachment_bytes: 9999999,
+        screen_share_resolution_cap: '720p',
+        registrationMode: 'invite_only',
+      });
+    });
+
+    await waitFor(() => {
+      const handshake = result.current.instanceStates.get(INSTANCE_A)?.handshakeData;
+      expect(handshake?.max_attachment_bytes).toBe(9999999);
+      expect(handshake?.screen_share_resolution_cap).toBe('720p');
+      expect(handshake?.registrationMode).toBe('invite_only');
+      // `type` must not poison handshakeData.
+      expect(handshake?.type).toBeUndefined();
+    });
+  });
+
+  it('ignores instance_updated for unknown instances and does not crash', async () => {
+    const { useInstances } = await import('./useInstances.js');
+    setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+
+    let instanceUpdatedHandler = null;
+    mockOn.mockImplementation((event, handler) => {
+      if (event === 'instance_updated') instanceUpdatedHandler = handler;
+    });
+
+    const { result } = renderHook(() => useInstances());
+    await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.bootInstance(INSTANCE_A);
+    });
+
+    await act(async () => {
+      await result.current.disconnectInstance(INSTANCE_A);
+    });
+
+    expect(() =>
+      instanceUpdatedHandler({ type: 'instance_updated', max_attachment_bytes: 1 }),
+    ).not.toThrow();
+  });
+
   it('refreshGuilds reconciles server hub subscriptions', async () => {
     const { useInstances } = await import('./useInstances.js');
     setupAuthMocks(JWT_A, USER_A, GUILDS_A);

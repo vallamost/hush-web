@@ -186,10 +186,31 @@ export async function publishScreen(room, refs, options = {}) {
 export async function unpublishScreen(room, refs) {
   for (const [trackSid, info] of refs.localTracksRef.current.entries()) {
     if (info.source === MEDIA_SOURCES.SCREEN || info.source === MEDIA_SOURCES.SCREEN_AUDIO) {
-      info.track.stop();
+      stopLocalMediaTrack(info.track);
       await room.localParticipant.unpublishTrack(info.track);
       refs.localTracksRef.current.delete(trackSid);
     }
+  }
+}
+
+/**
+ * Idempotently release every locally captured publication held in
+ * `localTracksRef`. Stops both the LiveKit wrapper and the underlying
+ * MediaStreamTrack for each entry, then empties the map. Does not
+ * touch React state — callers schedule UI updates separately when
+ * appropriate. Safe to call from leave / disconnect / unmount paths,
+ * including paths that have already cleared the map.
+ *
+ * @param {{ current: Map }} localTracksRef
+ */
+export function releaseLocalCaptureTracks(localTracksRef) {
+  const map = localTracksRef?.current;
+  if (!map || typeof map.forEach !== 'function') return;
+  map.forEach((info) => {
+    stopLocalMediaTrack(info?.track);
+  });
+  if (typeof map.clear === 'function') {
+    map.clear();
   }
 }
 

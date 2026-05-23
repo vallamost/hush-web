@@ -387,12 +387,18 @@ export function VoiceChannelView({
     // arriving in the small window between autoPublishedRef=true
     // and the async publishMic/publishWebcam settling would silently
     // be dropped (the effect's `!== undefined` guard would skip).
+    //
+    // Camera is intentionally NOT auto-published on join, even when
+    // `prefs.videoEnabled === true`. Camera enablement is session-
+    // local: persisted `videoEnabled` survives only as a hint for
+    // the prejoin dialog and the in-call picker baselines, never as
+    // an auto-publish trigger. Users must explicitly turn the
+    // camera on per session. Mic remains opt-in via `audioEnabled`
+    // because the existing prejoin flow already gates that choice.
     lastAppliedAudioDeviceRef.current = prefs.audioEnabled
       ? (prefs.audioDeviceId ?? null)
       : null
-    lastAppliedVideoDeviceRef.current = prefs.videoEnabled
-      ? (prefs.videoDeviceId ?? null)
-      : null
+    lastAppliedVideoDeviceRef.current = null
     lastAppliedOutputDeviceRef.current = prefs.outputDeviceId ?? null
     void (async () => {
       try {
@@ -405,16 +411,11 @@ export function VoiceChannelView({
           micPublishedRef.current = true
           setIsMicOn(true)
         }
-        if (prefs.videoEnabled) {
-          const videoDeviceId = prefs.videoDeviceId ?? null
-          await room.publishWebcam(videoDeviceId)
-          setIsWebcamOn(true)
-        }
       } catch (err) {
         console.warn("[VoiceChannel] auto-publish failed:", err)
       }
     })()
-  }, [room.isReady, prefs, room.publishMic, room.publishWebcam])
+  }, [room.isReady, prefs, room.publishMic])
 
   // Live re-publish when device prefs change while we are already
   // capturing. Initial publish is handled by the auto-publish effect

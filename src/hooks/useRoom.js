@@ -30,7 +30,7 @@ import {
   switchScreenSource as trackSwitchScreenSource,
   changeQuality as trackChangeQuality,
   publishWebcam as trackPublishWebcam,
-  stopLocalMediaTrack,
+  releaseLocalCaptureTracks,
   unpublishWebcam as trackUnpublishWebcam,
   watchScreen as trackWatchScreen,
   unwatchScreen as trackUnwatchScreen,
@@ -196,6 +196,51 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     adapterRef.current = null;
   }, []);
 
+  // ─── Release Every Local Capture (single source of truth) ─────────────
+  // Deterministic teardown for webcam, screen, screen-audio, and mic
+  // capture owned by the orchestrator. Webcam/screen are held in
+  // `localTracksRef`; mic is owned by the orchestrator. Both layers
+  // must be stopped on every leave/unmount/disconnect path so the
+  // OS-level capture indicator drops as soon as the user leaves.
+  //
+  // `scheduleStateUpdates` defaults to true. Unmount cleanup passes
+  // false to avoid scheduling setState on an unmounted component.
+  const releaseLocalCapture = useCallback(async ({ scheduleStateUpdates = true } = {}) => {
+    // 1. Stop wrapper + underlying MediaStreamTrack for every local
+    //    publication (webcam, screen video, screen audio). Idempotent;
+    //    safe even when `localTracksRef.current` was already cleared
+    //    elsewhere.
+    releaseLocalCaptureTracks(localTracksRef);
+
+    // 2. Tear down orchestrator-owned mic capture. Same path as
+    //    `shutdownMicCapture`, but inlined here so the unmount path
+    //    can skip the React state update without duplicating logic.
+    const orch = orchestratorRef.current;
+    const adapter = adapterRef.current;
+    if (orch) {
+      try {
+        if (adapter && orch.isLive) {
+          await orch.unpublish(adapter);
+        } else {
+          await orch.teardown();
+        }
+      } catch (err) {
+        console.warn('[livekit] mic teardown error during release:', err);
+      }
+    }
+    if (observerUnsubRef.current) {
+      try { observerUnsubRef.current(); } catch { /* teardown */ }
+      observerUnsubRef.current = null;
+    }
+    orchestratorRef.current = null;
+    adapterRef.current = null;
+
+    if (scheduleStateUpdates) {
+      setLocalTracks(new Map());
+      setLocalSpeaking(false);
+    }
+  }, []);
+
   const syncParticipantsFromRoom = useCallback(() => {
     const room = roomRef.current;
     if (!room) return;
@@ -226,7 +271,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       setError(null);
       try {
         if (roomRef.current) {
-          roomRef.current.disconnect();
+          await releaseLocalCapture({ scheduleStateUpdates: true });
+          await roomRef.current.disconnect();
           roomRef.current = null;
           // Clear stale playback elements from the previous room session.
           playbackManagerRef.current.dispose();
@@ -786,7 +832,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         setError(err.message);
       }
     },
-    [scheduleRemoteTracksUpdate, scheduleScreensUpdate, syncParticipantsFromRoom, wsClient, currentUserId, getToken, getStore, voiceKeyRotationHours, baseUrl],
+    [scheduleRemoteTracksUpdate, scheduleScreensUpdate, syncParticipantsFromRoom, releaseLocalCapture, wsClient, currentUserId, getToken, getStore, voiceKeyRotationHours, baseUrl],
   );
 
   // ─── Disconnect from Room ─────────────────────────────
@@ -809,6 +855,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     const voiceMlsApi = voiceMlsApiRef.current ?? createVoiceMlsApi(resolveVoiceBaseUrl(baseUrl));
 
     if (!roomRef.current) {
+      await releaseLocalCapture({ scheduleStateUpdates: true });
       // Still clean up MLS state even if room already gone
       const chId = channelIdRef.current;
       if (chId) {
@@ -839,14 +886,12 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     }
 
     try {
-      const localTracksMap = localTracksRef.current;
-      if (localTracksMap && typeof localTracksMap.forEach === 'function') {
-        localTracksMap.forEach((info) => {
-          stopLocalMediaTrack(info?.track);
-        });
-      }
-
-      await shutdownMicCapture();
+      // Single deterministic capture release: stops every local
+      // wrapper + native MediaStreamTrack (webcam, screen, screen
+      // audio) and tears down the orchestrator-owned mic capture.
+      // This is the only teardown path used by leave/disconnect so
+      // mic and camera indicators clear promptly on macOS/Electron.
+      await releaseLocalCapture({ scheduleStateUpdates: true });
 
       // Dispose playback manager to remove any stale audio elements.
       // A fresh manager is created so subsequent connectRoom calls start clean.
@@ -901,7 +946,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     } catch (err) {
       console.error('[livekit] Disconnect error:', err);
     }
-  }, [shutdownMicCapture, getStore, getToken]);
+  }, [releaseLocalCapture, getStore, getToken, baseUrl]);
 
   // ─── Unpublish Screen Share ───────────────────────────
   const unpublishScreen = useCallback(async () => {
@@ -1118,25 +1163,20 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         voiceSelfUpdateTimerRef.current = null;
       }
       const room = roomRef.current;
-      const localTracksMap = localTracksRef.current;
       if (room) {
         connectionEpochRef.current++;
-        if (localTracksMap && typeof localTracksMap.forEach === 'function') {
-          localTracksMap.forEach((info) => {
-            if (info?.track && typeof info.track.stop === 'function') {
-              info.track.stop();
-            }
-          });
-        }
+        // Same deterministic capture release as the leave/disconnect
+        // path, but without scheduling React state updates — this
+        // effect runs on unmount and setState on an unmounted
+        // component is a React anti-pattern.
+        releaseLocalCapture({ scheduleStateUpdates: false }).catch(() => {});
         room.disconnect();
         roomRef.current = null;
+      } else {
+        // Even when the room is already gone, capture resources may
+        // still be alive (mid-connect teardown). Release them.
+        releaseLocalCapture({ scheduleStateUpdates: false }).catch(() => {});
       }
-      // Teardown-only: release capture resources without unpublishing
-      // or scheduling UI updates. The room is already disconnecting,
-      // and setState on an unmounted component is a React anti-pattern.
-      orchestratorRef.current?.teardown().catch(() => {});
-      orchestratorRef.current = null;
-      adapterRef.current = null;
       playbackManagerRef.current.dispose();
     };
   }, []);
