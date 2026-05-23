@@ -66,6 +66,7 @@ import { resolveReauthInstanceUrl } from '../lib/reauthInstance';
 import {
   AUTH_INVALIDATION_REASONS,
   LOCAL_AUTH_RESET_REASONS,
+  deriveAuthLifecycle,
   planAuthenticatedSessionFetchFailure,
   planAuthenticatedVaultBoot,
   planInvalidatedSession,
@@ -783,6 +784,7 @@ async function deleteRevokedDeviceDatabases(userId, deviceId) {
  *   error: Error|null,
  *   authInvalidation: { reason: string, at?: string }|null,
  *   needsPinSetup: boolean,
+ *   lifecycle: string,
  *   isGuest: boolean,
  *   guestExpiresAt: string|null,
  *   voiceDisconnectRef: React.MutableRefObject<(() => void)|null>,
@@ -869,6 +871,22 @@ export function useAuth() {
   const needsUnlock =
     hasVault && !isVaultUnlocked && !shouldBypassUnlockForInvalidation;
   const isKnownBrowserProfile = hasVault;
+
+  // Canonical lifecycle value. Single pure derivation from observable hook
+  // state; legacy boolean fields above stay consistent with this (they are
+  // computed from the same inputs). See
+  // `hush-web/docs/security/auth-device-lifecycle.md` for the state set,
+  // transitions, and rendering contract.
+  const lifecycle = deriveAuthLifecycle({
+    loading,
+    hasToken: Boolean(token),
+    hasUser: Boolean(user),
+    hasLocalVault: hasVault,
+    isVaultUnlocked,
+    authInvalidation,
+    needsPinSetup,
+    isGuest,
+  });
 
   const clearError = useCallback(() => setError(null), []);
   const clearAuthInvalidation = useCallback(() => {
@@ -2778,6 +2796,10 @@ export function useAuth() {
     error,
     authInvalidation,
     needsPinSetup,
+    // Canonical auth/device/vault lifecycle. Prefer this over the legacy
+    // booleans for new code. See
+    // `hush-web/docs/security/auth-device-lifecycle.md`.
+    lifecycle,
     performChallengeResponse,
     performRegister,
     performRecovery,

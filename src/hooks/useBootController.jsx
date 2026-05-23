@@ -30,6 +30,7 @@
 import { createContext, useContext, useMemo } from 'react';
 import { useAuth } from '../contexts/AuthContext.jsx';
 import { useInstanceContext } from '../contexts/InstanceContext.jsx';
+import { AUTH_LIFECYCLE_STATES } from '../lib/authLifecycle.js';
 
 const BootContext = createContext(null);
 
@@ -46,6 +47,7 @@ export function BootProvider({ children }) {
     hasSession,
     needsPinSetup,
     transparencyError,
+    lifecycle,
     user,
   } = useAuth();
 
@@ -55,6 +57,19 @@ export function BootProvider({ children }) {
   } = useInstanceContext();
 
   const bootState = useMemo(() => {
+    // Lifecycle gates first: destructive / recovery-required states must
+    // never reach the authenticated route tree, even if some legacy
+    // boolean lags behind. See
+    // `hush-web/docs/security/auth-device-lifecycle.md` for the contract.
+    if (lifecycle === AUTH_LIFECYCLE_STATES.WIPING) return 'loading';
+    if (
+      lifecycle === AUTH_LIFECYCLE_STATES.REVOKED
+      || lifecycle === AUTH_LIFECYCLE_STATES.WIPED
+      || lifecycle === AUTH_LIFECYCLE_STATES.RECOVERY_REQUIRED
+    ) {
+      return 'needs_login';
+    }
+
     // Step 1: auth still rehydrating - block everything.
     if (authLoading) return 'loading';
 
@@ -77,7 +92,7 @@ export function BootProvider({ children }) {
     if (!guildsLoaded) return 'ready';
 
     return 'booted';
-  }, [authLoading, needsUnlock, hasSession, needsPinSetup, transparencyError, guildsLoaded]);
+  }, [authLoading, needsUnlock, hasSession, needsPinSetup, transparencyError, lifecycle, guildsLoaded]);
 
   const value = useMemo(() => ({
     bootState,

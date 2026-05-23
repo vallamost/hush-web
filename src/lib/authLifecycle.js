@@ -3,6 +3,28 @@ export const AUTH_INVALIDATION_REASONS = Object.freeze({
   SERVER_SESSION_INVALID: 'server_session_invalid',
 });
 
+/**
+ * Canonical auth/device/vault lifecycle states.
+ *
+ * The exhaustive set the UI may render. The legacy boolean fields exported by
+ * `useAuth` (`needsUnlock`, `hasSession`, `needsPinSetup`, ...) remain
+ * available for compatibility; new code should read `lifecycle` instead.
+ *
+ * Cross-reference: `hush-web/docs/security/auth-device-lifecycle.md`.
+ */
+export const AUTH_LIFECYCLE_STATES = Object.freeze({
+  BOOTING: 'booting',
+  UNAUTHENTICATED: 'unauthenticated',
+  LOCKED: 'locked',
+  PIN_SETUP_REQUIRED: 'pin_setup_required',
+  GUEST_AUTHORIZED: 'guest_authorized',
+  AUTHORIZED: 'authorized',
+  RECOVERY_REQUIRED: 'recovery_required',
+  REVOKED: 'revoked',
+  WIPING: 'wiping',
+  WIPED: 'wiped',
+});
+
 export const AUTH_LIFECYCLE_ACTIONS = Object.freeze({
   BLOCK_REVOKED_DEVICE_UNLOCK: 'block_revoked_device_unlock',
   CLEAR_STALE_LOCAL_VAULT_MARKER: 'clear_stale_local_vault_marker',
@@ -362,6 +384,89 @@ export function planPinFailure({ chargedCount, maxFailures }) {
  *   shouldClearVaultTimeoutEffects: boolean,
  * }}
  */
+/**
+ * Pure derivation of the canonical auth/device/vault lifecycle state from a
+ * snapshot of observable hook state.
+ *
+ * No side effects, no storage reads, no network. The caller (`useAuth`) is
+ * responsible for keeping the snapshot consistent with the underlying storage
+ * actions emitted by the other planners in this module.
+ *
+ * Priority (first match wins):
+ *  1. `authInvalidation.reason === device_revoked` → `revoked` (sticky)
+ *  2. `wipeInFlight`                          → `wiping`
+ *  3. `loading`                               → `booting`
+ *  4. Live session (`hasToken && hasUser`):
+ *       - `needsPinSetup`                     → `pin_setup_required`
+ *       - `isGuest`                           → `guest_authorized`
+ *       - `hasLocalVault && !isVaultUnlocked` → `locked`
+ *       - otherwise                           → `authorized`
+ *  5. No live session:
+ *       - `authInvalidation.reason === server_session_invalid`:
+ *           - `hasLocalVault`                  → `locked` (PIN retry recovers)
+ *           - else                             → `recovery_required`
+ *       - `hasLocalVault`                     → `locked`
+ *       - `wipedSticky`                       → `wiped`
+ *       - else                                → `unauthenticated`
+ *
+ * A `device_revoked` tombstone outranks every later signal so a stale
+ * `server_session_invalid` cannot downgrade it into a recoverable state.
+ *
+ * @param {{
+ *   loading?: boolean,
+ *   hasToken?: boolean,
+ *   hasUser?: boolean,
+ *   hasLocalVault?: boolean,
+ *   isVaultUnlocked?: boolean,
+ *   authInvalidation?: { reason?: string }|null,
+ *   needsPinSetup?: boolean,
+ *   isGuest?: boolean,
+ *   wipeInFlight?: boolean,
+ *   wipedSticky?: boolean,
+ * }} snapshot
+ * @returns {string} one of AUTH_LIFECYCLE_STATES
+ */
+export function deriveAuthLifecycle(snapshot = {}) {
+  const {
+    loading = false,
+    hasToken = false,
+    hasUser = false,
+    hasLocalVault = false,
+    isVaultUnlocked = false,
+    authInvalidation = null,
+    needsPinSetup = false,
+    isGuest = false,
+    wipeInFlight = false,
+    wipedSticky = false,
+  } = snapshot;
+
+  if (authInvalidation?.reason === AUTH_INVALIDATION_REASONS.DEVICE_REVOKED) {
+    return AUTH_LIFECYCLE_STATES.REVOKED;
+  }
+
+  if (wipeInFlight) return AUTH_LIFECYCLE_STATES.WIPING;
+
+  if (loading) return AUTH_LIFECYCLE_STATES.BOOTING;
+
+  const hasSession = Boolean(hasToken && hasUser);
+
+  if (hasSession) {
+    if (needsPinSetup) return AUTH_LIFECYCLE_STATES.PIN_SETUP_REQUIRED;
+    if (isGuest) return AUTH_LIFECYCLE_STATES.GUEST_AUTHORIZED;
+    if (hasLocalVault && !isVaultUnlocked) return AUTH_LIFECYCLE_STATES.LOCKED;
+    return AUTH_LIFECYCLE_STATES.AUTHORIZED;
+  }
+
+  if (authInvalidation?.reason === AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID) {
+    if (hasLocalVault) return AUTH_LIFECYCLE_STATES.LOCKED;
+    return AUTH_LIFECYCLE_STATES.RECOVERY_REQUIRED;
+  }
+
+  if (hasLocalVault) return AUTH_LIFECYCLE_STATES.LOCKED;
+  if (wipedSticky) return AUTH_LIFECYCLE_STATES.WIPED;
+  return AUTH_LIFECYCLE_STATES.UNAUTHENTICATED;
+}
+
 export function planLocalAuthReset(reason = LOCAL_AUTH_RESET_REASONS.LOGOUT) {
   if (!LOCAL_AUTH_RESET_REASON_SET.has(reason)) {
     throw new TypeError(`unknown local auth reset reason: ${reason}`);

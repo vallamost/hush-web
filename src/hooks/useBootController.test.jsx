@@ -29,6 +29,9 @@ function mockState({
   needsPinSetup = false,
   transparencyError = null,
   guildsLoaded = false,
+  // Default lifecycle matches `unauthenticated` semantics — caller can
+  // override to drive the HUSHHQ-15 gates.
+  lifecycle = 'unauthenticated',
 } = {}) {
   useAuth.mockReturnValue({
     loading: authLoading,
@@ -36,6 +39,7 @@ function mockState({
     hasSession,
     needsPinSetup,
     transparencyError,
+    lifecycle,
     user: hasSession ? { id: 'u1' } : null,
   });
   useInstanceContext.mockReturnValue({ guildsLoaded, mergedGuilds: guildsLoaded ? [{ id: 'g1' }] : [] });
@@ -130,6 +134,75 @@ describe('useBootController', () => {
     });
     const { result } = renderHook(() => useBootController(), { wrapper });
     expect(result.current.bootState).toBe('needs_pin');
+  });
+
+  // HUSHHQ-15: destructive / recovery-required lifecycle states must
+  // not let the authenticated route tree render, regardless of any
+  // legacy boolean lag.
+  describe('lifecycle gating (HUSHHQ-15)', () => {
+    it('routes revoked to needs_login even if guilds are loaded', () => {
+      mockState({
+        hasSession: false,
+        guildsLoaded: true,
+        lifecycle: 'revoked',
+      });
+      const { result } = renderHook(() => useBootController(), { wrapper });
+      expect(result.current.bootState).toBe('needs_login');
+    });
+
+    it('routes recovery_required to needs_login', () => {
+      mockState({
+        hasSession: false,
+        guildsLoaded: true,
+        lifecycle: 'recovery_required',
+      });
+      const { result } = renderHook(() => useBootController(), { wrapper });
+      expect(result.current.bootState).toBe('needs_login');
+    });
+
+    it('routes wiped to needs_login', () => {
+      mockState({
+        hasSession: false,
+        guildsLoaded: true,
+        lifecycle: 'wiped',
+      });
+      const { result } = renderHook(() => useBootController(), { wrapper });
+      expect(result.current.bootState).toBe('needs_login');
+    });
+
+    it('routes wiping to loading so neither auth tree nor PIN screen renders', () => {
+      mockState({
+        // Even if a stale local boolean reports a vault, wiping wins.
+        needsUnlock: true,
+        hasSession: true,
+        guildsLoaded: true,
+        lifecycle: 'wiping',
+      });
+      const { result } = renderHook(() => useBootController(), { wrapper });
+      expect(result.current.bootState).toBe('loading');
+    });
+
+    it('revoked lifecycle outranks an in-memory authenticated session', () => {
+      // Tripwire: if useAuth still has a stale token/user when revoked
+      // fires, the boot controller must still gate the auth tree.
+      mockState({
+        hasSession: true,
+        guildsLoaded: true,
+        lifecycle: 'revoked',
+      });
+      const { result } = renderHook(() => useBootController(), { wrapper });
+      expect(result.current.bootState).toBe('needs_login');
+    });
+
+    it('falls through to legacy booted when lifecycle is authorized', () => {
+      mockState({
+        hasSession: true,
+        guildsLoaded: true,
+        lifecycle: 'authorized',
+      });
+      const { result } = renderHook(() => useBootController(), { wrapper });
+      expect(result.current.bootState).toBe('booted');
+    });
   });
 
   it('pin_setup takes priority over transparency_error', () => {

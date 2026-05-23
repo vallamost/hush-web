@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   AUTH_INVALIDATION_REASONS,
   AUTH_LIFECYCLE_ACTIONS,
+  AUTH_LIFECYCLE_STATES,
   LOCAL_AUTH_RESET_REASONS,
   VAULT_STATES,
+  deriveAuthLifecycle,
   normalizeAuthInvalidationReason,
   planInvalidatedSession,
   planAuthenticatedSessionFetchFailure,
@@ -313,5 +315,287 @@ describe('authLifecycle', () => {
 
   it('rejects unknown local auth reset reasons', () => {
     expect(() => planLocalAuthReset('logoff')).toThrow(TypeError);
+  });
+});
+
+// HUSHHQ-15: canonical auth/device/vault lifecycle derivation.
+// See `hush-web/docs/security/auth-device-lifecycle.md` for the contract.
+describe('deriveAuthLifecycle', () => {
+  it('returns booting while auth is rehydrating', () => {
+    expect(deriveAuthLifecycle({ loading: true })).toBe(
+      AUTH_LIFECYCLE_STATES.BOOTING,
+    );
+  });
+
+  it('returns unauthenticated for a clean session-free snapshot', () => {
+    expect(deriveAuthLifecycle({})).toBe(AUTH_LIFECYCLE_STATES.UNAUTHENTICATED);
+  });
+
+  it('returns authorized for a live session with unlocked vault', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        hasLocalVault: true,
+        isVaultUnlocked: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
+  });
+
+  it('returns authorized for a live session without a local vault', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        hasLocalVault: false,
+        isVaultUnlocked: false,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
+  });
+
+  it('returns locked for a live session whose vault is still locked', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        hasLocalVault: true,
+        isVaultUnlocked: false,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.LOCKED);
+  });
+
+  it('returns pin_setup_required when a session exists but PIN setup is pending', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        needsPinSetup: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.PIN_SETUP_REQUIRED);
+  });
+
+  it('returns guest_authorized for a live guest session', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        isGuest: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.GUEST_AUTHORIZED);
+  });
+
+  it('returns locked for a no-token boot that found a recoverable vault', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasToken: false,
+        hasUser: false,
+        hasLocalVault: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.LOCKED);
+  });
+
+  it('returns revoked when a device-revoked tombstone is present', () => {
+    expect(
+      deriveAuthLifecycle({
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.REVOKED);
+  });
+
+  it('keeps the device-revoked tombstone sticky even with a live session', () => {
+    // A revoked tombstone is sticky and destructive. A stale in-memory
+    // session/JWT must not promote it back to authorized.
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        hasLocalVault: true,
+        isVaultUnlocked: true,
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.REVOKED);
+  });
+
+  it('cannot be downgraded from revoked to server_session_invalid', () => {
+    // Two competing invalidation signals: the older device_revoked tombstone
+    // must outrank a later generic server_session_invalid.
+    expect(
+      deriveAuthLifecycle({
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+        hasLocalVault: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.REVOKED);
+
+    expect(
+      deriveAuthLifecycle({
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID },
+        hasLocalVault: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.LOCKED);
+  });
+
+  it('returns locked after server_session_invalid when a recoverable vault remains', () => {
+    expect(
+      deriveAuthLifecycle({
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID },
+        hasLocalVault: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.LOCKED);
+  });
+
+  it('returns recovery_required after server_session_invalid with no recoverable vault', () => {
+    expect(
+      deriveAuthLifecycle({
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID },
+        hasLocalVault: false,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.RECOVERY_REQUIRED);
+  });
+
+  it('returns wiping while a destructive vault wipe is in progress', () => {
+    // wipeInFlight outranks normal session signals, including a live session.
+    expect(
+      deriveAuthLifecycle({
+        wipeInFlight: true,
+        hasToken: true,
+        hasUser: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.WIPING);
+  });
+
+  it('keeps device_revoked above an in-flight wipe', () => {
+    expect(
+      deriveAuthLifecycle({
+        wipeInFlight: true,
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.REVOKED);
+  });
+
+  it('returns wiped (sticky) immediately after a destructive wipe completes', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasLocalVault: false,
+        wipedSticky: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.WIPED);
+  });
+
+  it('falls through to unauthenticated after the wiped marker clears', () => {
+    expect(
+      deriveAuthLifecycle({
+        hasLocalVault: false,
+        wipedSticky: false,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.UNAUTHENTICATED);
+  });
+
+  it('a max-PIN-failure wipe plan produces inputs that do not preserve a PIN-resumable vault', () => {
+    // After the planner says "wipe", the caller is expected to:
+    //   - hasLocalVault: false
+    //   - clear authInvalidation (no session_invalid promotion)
+    //   - clear isVaultUnlocked
+    // The canonical lifecycle must then land in wiped (if the sticky
+    // marker is set) or unauthenticated, NEVER locked.
+    const wipePlan = planPinFailure({ chargedCount: 10, maxFailures: 10 });
+    expect(wipePlan.shouldWipeLocalVault).toBe(true);
+    expect(wipePlan.nextHasLocalVault).toBe(false);
+    expect(wipePlan.nextVaultState).toBe(VAULT_STATES.NONE);
+
+    // Snapshot reflecting the post-wipe state with the sticky marker.
+    expect(
+      deriveAuthLifecycle({
+        hasLocalVault: wipePlan.nextHasLocalVault,
+        wipedSticky: true,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.WIPED);
+
+    // Same post-wipe state without the sticky marker collapses to unauth.
+    expect(
+      deriveAuthLifecycle({
+        hasLocalVault: wipePlan.nextHasLocalVault,
+        wipedSticky: false,
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.UNAUTHENTICATED);
+
+    // Crucially: even if a stale server_session_invalid lingered, the
+    // post-wipe snapshot must NOT route back to a PIN-resumable locked
+    // vault, because hasLocalVault is false.
+    expect(
+      deriveAuthLifecycle({
+        hasLocalVault: wipePlan.nextHasLocalVault,
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.SERVER_SESSION_INVALID },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.RECOVERY_REQUIRED);
+  });
+
+  it('a no-token boot with a persisted device_revoked tombstone returns revoked, not locked', () => {
+    // Even if a leftover IDB vault blob still exists, a no-token boot
+    // with a device_revoked tombstone must not surface the PIN screen.
+    // The lifecycle returns revoked; the consumer is then required to
+    // run destructive cleanup.
+    expect(
+      deriveAuthLifecycle({
+        loading: false,
+        hasToken: false,
+        hasUser: false,
+        hasLocalVault: true,
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.REVOKED);
+
+    // Same snapshot with no remaining vault still reports revoked
+    // until the consumer clears the tombstone.
+    expect(
+      deriveAuthLifecycle({
+        loading: false,
+        hasToken: false,
+        hasUser: false,
+        hasLocalVault: false,
+        authInvalidation: { reason: AUTH_INVALIDATION_REASONS.DEVICE_REVOKED },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.REVOKED);
+  });
+
+  it('treats null / undefined authInvalidation as no signal', () => {
+    expect(
+      deriveAuthLifecycle({ hasToken: true, hasUser: true, authInvalidation: null }),
+    ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
+    expect(
+      deriveAuthLifecycle({ hasToken: true, hasUser: true, authInvalidation: undefined }),
+    ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
+  });
+
+  it('rejects an unknown invalidation reason by treating it as no signal', () => {
+    // Unknown reasons must not be silently coerced to revoked. Lifecycle
+    // surface should fall through to the standard session/vault logic.
+    expect(
+      deriveAuthLifecycle({
+        hasToken: true,
+        hasUser: true,
+        authInvalidation: { reason: 'something_else' },
+      }),
+    ).toBe(AUTH_LIFECYCLE_STATES.AUTHORIZED);
+  });
+
+  it('exposes the complete canonical state set including the HUSHHQ-15 minimum', () => {
+    // Tripwire: future edits must not silently delete a state from
+    // the canonical surface. Every state required by HUSHHQ-15 plus
+    // the unambiguous internal states must remain exported.
+    const required = [
+      'booting',
+      'unauthenticated',
+      'locked',
+      'pin_setup_required',
+      'guest_authorized',
+      'authorized',
+      'recovery_required',
+      'revoked',
+      'wiping',
+      'wiped',
+    ];
+    for (const value of required) {
+      expect(Object.values(AUTH_LIFECYCLE_STATES)).toContain(value);
+    }
   });
 });
