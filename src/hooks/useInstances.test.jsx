@@ -770,7 +770,12 @@ describe('useInstances', () => {
 
   it('ignores instance_updated for unknown instances and does not crash', async () => {
     const { useInstances } = await import('./useInstances.js');
+    const { queryClient } = await import('../lib/queryClient.ts');
+    const { instanceConfigQueryKey } = await import(
+      '../lib/instanceConfigQuery.js'
+    );
     setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+    queryClient.removeQueries({ queryKey: instanceConfigQueryKey(INSTANCE_A) });
 
     let instanceUpdatedHandler = null;
     mockOn.mockImplementation((event, handler) => {
@@ -791,6 +796,137 @@ describe('useInstances', () => {
     expect(() =>
       instanceUpdatedHandler({ type: 'instance_updated', max_attachment_bytes: 1 }),
     ).not.toThrow();
+    expect(
+      queryClient.getQueryData(instanceConfigQueryKey(INSTANCE_A)),
+    ).toBeUndefined();
+  });
+
+  // HUSHHQ-18: instance runtime config is owned by TanStack Query.
+  // boot must seed the per-instance cache from handshakeData and
+  // `instance_updated` must merge into the matching key only.
+  describe('instance runtime config cache (HUSHHQ-18)', () => {
+    it('seeds the per-instance config cache from handshake data on boot', async () => {
+      const { useInstances } = await import('./useInstances.js');
+      const { queryClient } = await import('../lib/queryClient.ts');
+      const { instanceConfigQueryKey } = await import(
+        '../lib/instanceConfigQuery.js'
+      );
+      queryClient.removeQueries({ queryKey: instanceConfigQueryKey(INSTANCE_A) });
+
+      apiModule.getHandshake.mockResolvedValueOnce({
+        server_version: '1.0',
+        api_version: '1',
+        max_attachment_bytes: 12345,
+        screen_share_resolution_cap: '720p',
+      });
+      apiModule.requestChallenge.mockResolvedValueOnce({ nonce: 'deadbeef' });
+      apiModule.verifyChallenge.mockResolvedValueOnce({ token: JWT_A, user: USER_A });
+      apiModule.getMyGuilds.mockResolvedValueOnce(GUILDS_A);
+
+      const { result } = renderHook(() => useInstances());
+      await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.bootInstance(INSTANCE_A);
+      });
+
+      await waitFor(() => {
+        expect(result.current.instanceStates.get(INSTANCE_A)?.connectionState).toBe('connected');
+      });
+
+      const cached = queryClient.getQueryData(instanceConfigQueryKey(INSTANCE_A));
+      expect(cached).toMatchObject({
+        max_attachment_bytes: 12345,
+        maxAttachmentBytes: 12345,
+        screen_share_resolution_cap: '720p',
+        screenShareResolutionCap: '720p',
+      });
+    });
+
+    it('merges instance_updated into the config cache and strips `type`', async () => {
+      const { useInstances } = await import('./useInstances.js');
+      const { queryClient } = await import('../lib/queryClient.ts');
+      const { instanceConfigQueryKey } = await import(
+        '../lib/instanceConfigQuery.js'
+      );
+      queryClient.removeQueries({ queryKey: instanceConfigQueryKey(INSTANCE_A) });
+
+      setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+
+      let instanceUpdatedHandler = null;
+      mockOn.mockImplementation((event, handler) => {
+        if (event === 'instance_updated') instanceUpdatedHandler = handler;
+      });
+
+      const { result } = renderHook(() => useInstances());
+      await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.bootInstance(INSTANCE_A);
+      });
+
+      await act(async () => {
+        instanceUpdatedHandler({
+          type: 'instance_updated',
+          max_attachment_bytes: 7654321,
+          registrationMode: 'invite_only',
+        });
+      });
+
+      const cached = queryClient.getQueryData(instanceConfigQueryKey(INSTANCE_A));
+      expect(cached.max_attachment_bytes).toBe(7654321);
+      expect(cached.maxAttachmentBytes).toBe(7654321);
+      expect(cached.registrationMode).toBe('invite_only');
+      expect(cached.registration_mode).toBe('invite_only');
+      // `type` must never reach the cache.
+      expect(cached.type).toBeUndefined();
+    });
+
+    it('instance_updated for one instance does not touch another instance cache', async () => {
+      const { useInstances } = await import('./useInstances.js');
+      const { queryClient } = await import('../lib/queryClient.ts');
+      const { instanceConfigQueryKey, seedInstanceConfigQuery } = await import(
+        '../lib/instanceConfigQuery.js'
+      );
+
+      queryClient.removeQueries({ queryKey: instanceConfigQueryKey(INSTANCE_A) });
+      queryClient.removeQueries({ queryKey: instanceConfigQueryKey(INSTANCE_B) });
+
+      // Pre-seed B with a known value. We will only boot A + drive an
+      // instance_updated against A; B's cache must stay untouched.
+      seedInstanceConfigQuery(queryClient, INSTANCE_B, {
+        max_attachment_bytes: 22,
+      });
+
+      setupAuthMocks(JWT_A, USER_A, GUILDS_A);
+      let instanceUpdatedHandler = null;
+      mockOn.mockImplementation((event, handler) => {
+        if (event === 'instance_updated') instanceUpdatedHandler = handler;
+      });
+
+      const { result } = renderHook(() => useInstances());
+      await waitFor(() => expect(registryModule.openInstanceRegistry).toHaveBeenCalled());
+
+      await act(async () => {
+        await result.current.bootInstance(INSTANCE_A);
+      });
+
+      await act(async () => {
+        instanceUpdatedHandler({
+          type: 'instance_updated',
+          max_attachment_bytes: 999,
+        });
+      });
+
+      expect(
+        queryClient.getQueryData(instanceConfigQueryKey(INSTANCE_A)),
+      ).toMatchObject({ max_attachment_bytes: 999 });
+
+      // Critically: instance B's cache is unchanged.
+      expect(
+        queryClient.getQueryData(instanceConfigQueryKey(INSTANCE_B)),
+      ).toMatchObject({ max_attachment_bytes: 22 });
+    });
   });
 
   it('refreshGuilds reconciles server hub subscriptions', async () => {

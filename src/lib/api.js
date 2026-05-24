@@ -1023,7 +1023,11 @@ export async function getHandshake(baseUrl = '', signal) {
     cleanup();
   }
   if (!res.ok) throw new Error(`handshake failed: ${res.status}`);
-  const data = await res.json();
+  // Route the success body through the shared JSON-boundary helper so a
+  // 2xx HTML/empty/malformed response surfaces as a typed
+  // `invalid-response-schema` diagnostic instead of a silent crash deep
+  // inside boot.
+  const data = await readJsonResponse(res, 'getHandshake');
   if (data?.registrationMode !== undefined && data.registration_mode === undefined) {
     data.registration_mode = data.registrationMode;
   }

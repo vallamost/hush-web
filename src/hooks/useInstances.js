@@ -47,6 +47,12 @@ import {
   assertHandshakeCompatible,
   isHandshakeCompatibilityError,
 } from '../lib/handshakeCompatibility';
+import { queryClient } from '../lib/queryClient';
+import {
+  mergeInstanceConfigUpdate,
+  removeInstanceConfigQuery,
+  seedInstanceConfigQuery,
+} from '../lib/instanceConfigQuery.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -442,13 +448,18 @@ export function useInstances() {
     const handleInstanceUpdated = (data) => {
       const entry = instancesRef.current.get(instanceUrl);
       if (!entry) return;
-      const merged = { ...(entry.handshakeData ?? {}) };
-      for (const [key, value] of Object.entries(data ?? {})) {
-        if (key === 'type') continue;
-        if (value === undefined) continue;
-        merged[key] = value;
-      }
-      entry.handshakeData = merged;
+      // The TanStack Query cache is the authoritative place for instance
+      // runtime config (HUSHHQ-18). Only connected/registered instances
+      // may update it; late WS events after disconnect must not recreate
+      // a cache entry that `disconnectInstance` just removed.
+      // Scoping is by instanceUrl, so an update for one instance never
+      // touches another instance's cache entry.
+      const merged = mergeInstanceConfigUpdate(queryClient, instanceUrl, data);
+      // Mirror the merged value into the legacy `handshakeData` shape so
+      // existing consumers reading `connectedInstances[].handshakeData`
+      // (e.g. authenticated-app.tsx attachment limit + voice screen-share
+      // cap) keep working without a broad UI rewrite.
+      entry.handshakeData = merged ?? entry.handshakeData ?? {};
       flushState();
     };
     wsClient.on('instance_updated', handleInstanceUpdated);
@@ -524,6 +535,11 @@ export function useInstances() {
       // mutate durable MLS state.
       const handshakeData = await assertHandshakeCompatible(instanceUrl);
       if (!isActiveGeneration()) return;
+
+      // Seed the TanStack Query cache for this instance's runtime
+      // config (HUSHHQ-18). Per-instance scoping is enforced by
+      // `instanceConfigQueryKey(instanceUrl)`.
+      seedInstanceConfigQuery(queryClient, instanceUrl, handshakeData);
 
       // Step 2: Auth.
       const { privateKey, publicKey } = identityKey;
@@ -649,6 +665,10 @@ export function useInstances() {
     clearServerSubscriptions(entry);
     try { entry.wsClient?.disconnect(); } catch { /* noop */ }
 
+    // Drop the per-instance config cache entry so a future boot of a
+    // different instance under the same URL cannot inherit stale config.
+    removeInstanceConfigQuery(queryClient, instanceUrl);
+
     // Remove from IDB.
     const db = dbRef.current;
     if (db) {
@@ -712,6 +732,10 @@ export function useInstances() {
     // effect skips the fallback path on that branch.
     const handshakeData = await assertHandshakeCompatible(instanceUrl);
     if (!isActiveGeneration()) return;
+
+    // Seed the TanStack Query cache for this instance's runtime config
+    // (HUSHHQ-18). Same per-instance scoping as bootInstance.
+    seedInstanceConfigQuery(queryClient, instanceUrl, handshakeData);
 
     // Save to IDB.
     try {
