@@ -138,6 +138,16 @@ function createApiHttpError(data, fallback, status) {
   return err;
 }
 
+async function readJsonMutationResponse(res, operation, fallback) {
+  const data = res.ok
+    ? await readJsonResponse(res, operation, { allowEmpty: true })
+    : await readJsonResponseOrNull(res, operation);
+  if (!res.ok) {
+    throw createApiHttpError(data, fallback, res.status);
+  }
+  return data;
+}
+
 function createFetchSignal(timeoutMs, callerSignal) {
   if (typeof AbortController === 'undefined') {
     return {
@@ -504,10 +514,7 @@ export async function updateInstance(token, body, baseUrl = '') {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }, baseUrl);
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `update instance ${res.status}`);
-  }
+  await readJsonMutationResponse(res, 'updateInstance', `update instance ${res.status}`);
 }
 
 // ── Transparency Log API ──────────────────────────────────────────────────────
@@ -1669,7 +1676,7 @@ export async function updateInstanceConfig(token, updates, baseUrl = '') {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(updates),
   }, baseUrl);
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Config update failed');
+  await readJsonMutationResponse(res, 'updateInstanceConfig', 'Config update failed');
 }
 
 // ── Server Templates ─────────────────────────────────────────────────────────

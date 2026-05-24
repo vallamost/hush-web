@@ -21,6 +21,8 @@ import {
   resolveDeviceLinkRequest,
   resolveAuthAudience,
   revokeDeviceKey,
+  updateInstance,
+  updateInstanceConfig,
   uploadMLSCredential,
   uploadMLSKeyPackages,
   getKeyPackageCount,
@@ -1047,6 +1049,136 @@ describe('runtime response schemas', () => {
 
     await expect(revokeDeviceKey('jwt', 'device-1')).rejects.toMatchObject({
       message: 'revokeDeviceKey 503',
+      status: 503,
+    });
+  });
+
+  it('updateInstance accepts empty success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      updateInstance('jwt', { name: 'Hush' }, 'https://chat.example.com'),
+    ).resolves.toBeUndefined();
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://chat.example.com/api/instance');
+    expect(opts.method).toBe('PUT');
+    expect(opts.headers.get('Authorization')).toBe('Bearer jwt');
+    expect(JSON.parse(opts.body)).toEqual({ name: 'Hush' });
+  });
+
+  it('updateInstance rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(updateInstance('jwt', { name: 'Hush' })).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'updateInstance',
+    });
+  });
+
+  it('updateInstance preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'owner only' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(updateInstance('jwt', { name: 'Hush' })).rejects.toMatchObject({
+      message: 'owner only',
+      status: 403,
+    });
+  });
+
+  it('updateInstance keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 502,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(updateInstance('jwt', { name: 'Hush' })).rejects.toMatchObject({
+      message: 'update instance 502',
+      status: 502,
+    });
+  });
+
+  it('updateInstanceConfig accepts empty success responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(null, { status: 204 }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      updateInstanceConfig('jwt', { maxAttachmentBytes: 1048576 }),
+    ).resolves.toBeUndefined();
+
+    const [url, opts] = mockFetch.mock.calls[0];
+    expect(url).toBe('/api/instance');
+    expect(opts.method).toBe('PUT');
+    expect(opts.headers.get('Authorization')).toBe('Bearer jwt');
+    expect(JSON.parse(opts.body)).toEqual({ maxAttachmentBytes: 1048576 });
+  });
+
+  it('updateInstanceConfig rejects HTML success responses at the API boundary', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>not found</title>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      updateInstanceConfig('jwt', { maxAttachmentBytes: 1048576 }),
+    ).rejects.toMatchObject({
+      code: 'invalid_json_response',
+      operation: 'updateInstanceConfig',
+    });
+  });
+
+  it('updateInstanceConfig preserves structured error messages', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'config locked' }), {
+        status: 409,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      updateInstanceConfig('jwt', { maxAttachmentBytes: 1048576 }),
+    ).rejects.toMatchObject({
+      message: 'config locked',
+      status: 409,
+    });
+  });
+
+  it('updateInstanceConfig keeps HTTP status as source of truth for HTML error responses', async () => {
+    const mockFetch = vi.fn().mockResolvedValue(
+      new Response('<!DOCTYPE html><title>bad gateway</title>', {
+        status: 503,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      }),
+    );
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(
+      updateInstanceConfig('jwt', { maxAttachmentBytes: 1048576 }),
+    ).rejects.toMatchObject({
+      message: 'Config update failed',
       status: 503,
     });
   });
