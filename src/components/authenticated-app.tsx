@@ -62,6 +62,11 @@ import { VoicePlaceholderView } from "@/components/voice/voice-placeholder-view"
 import { useAuth } from "@/contexts/AuthContext"
 import { getDeviceId, HOME_INSTANCE_KEY } from "@/hooks/useAuth"
 import { useInstanceContext } from "@/contexts/InstanceContext"
+import { useInstanceConfig } from "@/hooks/useInstanceConfig"
+import {
+  readMaxAttachmentBytes,
+  readScreenShareResolutionCap,
+} from "@/lib/instanceRuntimeConfig"
 import * as mlsStore from "@/lib/mlsStore"
 import { buildGuildRouteRef, parseGuildRouteRef } from "@/lib/slugify"
 import { buildGuildInviteLink } from "@/lib/inviteLinks"
@@ -169,39 +174,10 @@ interface VoiceState {
   isWebcamOn: boolean
 }
 
-type ScreenShareResolutionCap = "1080p" | "720p"
-const DEFAULT_MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024
-
-function readScreenShareResolutionCap(
-  handshakeData:
-    | {
-        screen_share_resolution_cap?: string
-        screenShareResolutionCap?: string
-      }
-    | null
-    | undefined
-): ScreenShareResolutionCap {
-  const value =
-    handshakeData?.screen_share_resolution_cap ??
-    handshakeData?.screenShareResolutionCap
-  return value === "720p" ? "720p" : "1080p"
-}
-
-function readMaxAttachmentBytes(
-  handshakeData:
-    | {
-        max_attachment_bytes?: number
-        maxAttachmentBytes?: number
-      }
-    | null
-    | undefined
-): number {
-  const value =
-    handshakeData?.max_attachment_bytes ?? handshakeData?.maxAttachmentBytes
-  return typeof value === "number" && value > 0
-    ? value
-    : DEFAULT_MAX_ATTACHMENT_BYTES
-}
+// HUSHHQ-19: `readScreenShareResolutionCap`, `readMaxAttachmentBytes`,
+// the screen-share cap type, and the attachment default live in
+// `@/lib/instanceRuntimeConfig` so they stay unit-testable
+// without mounting the full app tree.
 
 function systemIconFor(type: SystemChannelType): React.ReactNode {
   return type === "moderation" ? <ShieldAlertIcon /> : <ScrollTextIcon />
@@ -347,6 +323,10 @@ export function AuthenticatedApp() {
   const baseUrl = instanceUrl ?? ""
   const wsClient = instanceUrl ? getWsClient(instanceUrl) : null
   const currentUserId = user?.id ?? ""
+  // Legacy `connectedInstances[].handshakeData` is kept as the fallback
+  // source while the TanStack Query cache (HUSHHQ-18) is the primary
+  // truth (HUSHHQ-19). The hook prefers the cache and only reads this
+  // mirror when the cache is empty (e.g. mid-disconnect race).
   const activeHandshakeData = React.useMemo(() => {
     if (!instanceUrl) return null
     const activeOrigin = normalizeOrigin(instanceUrl)
@@ -356,7 +336,8 @@ export function AuthenticatedApp() {
       )?.handshakeData ?? null
     )
   }, [connectedInstances, instanceUrl])
-  const activeMaxAttachmentBytes = readMaxAttachmentBytes(activeHandshakeData)
+  const activeInstanceConfig = useInstanceConfig(instanceUrl, activeHandshakeData)
+  const activeMaxAttachmentBytes = readMaxAttachmentBytes(activeInstanceConfig)
 
   const {
     categories,
@@ -1206,6 +1187,9 @@ export function AuthenticatedApp() {
   const voiceWsClient = joinedVoiceInstanceUrl
     ? getWsClient(joinedVoiceInstanceUrl)
     : null
+  // Same migration pattern as the active-server config above: the
+  // TanStack Query cache is primary; the legacy `handshakeData` mirror
+  // remains as a fallback for the brief mid-disconnect window.
   const voiceHandshakeData = React.useMemo(() => {
     if (!joinedVoiceInstanceUrl) return null
     const joinedOrigin = normalizeOrigin(joinedVoiceInstanceUrl)
@@ -1215,8 +1199,12 @@ export function AuthenticatedApp() {
       )?.handshakeData ?? null
     )
   }, [connectedInstances, joinedVoiceInstanceUrl])
+  const voiceInstanceConfig = useInstanceConfig(
+    joinedVoiceInstanceUrl,
+    voiceHandshakeData
+  )
   const voiceScreenShareResolutionCap =
-    readScreenShareResolutionCap(voiceHandshakeData)
+    readScreenShareResolutionCap(voiceInstanceConfig)
   const voiceGetToken = React.useCallback(
     () => voiceToken,
     [voiceToken]
