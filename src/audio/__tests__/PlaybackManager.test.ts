@@ -222,4 +222,167 @@ describe('PlaybackManager', () => {
     playSpy.mockRestore();
     manager.dispose();
   });
+
+  // ─── Blocked Playback (HUSHHQ-78) ─────────────────
+
+  it('appends the element to the container before calling play() when bound', () => {
+    const manager = new PlaybackManager();
+    manager.bindContainer(container);
+
+    let parentAtPlay: ParentNode | null = 'unset' as unknown as ParentNode | null;
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockImplementation(function (this: HTMLAudioElement) {
+        parentAtPlay = this.parentNode;
+        return Promise.resolve();
+      });
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    expect(parentAtPlay).toBe(container);
+
+    playSpy.mockRestore();
+    manager.dispose();
+  });
+
+  it('defers play() until bindContainer attaches a track added before binding', () => {
+    const manager = new PlaybackManager();
+
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockResolvedValue(undefined);
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+    expect(playSpy).not.toHaveBeenCalled();
+
+    manager.bindContainer(container);
+    expect(playSpy).toHaveBeenCalledTimes(1);
+    expect(container.childElementCount).toBe(1);
+
+    playSpy.mockRestore();
+    manager.dispose();
+  });
+
+  it('rejected play() marks blocked playback and fires the callback with true', async () => {
+    const events: boolean[] = [];
+    const manager = new PlaybackManager({
+      onPlaybackBlockedChange: (blocked) => events.push(blocked),
+    });
+    manager.bindContainer(container);
+
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValue(new DOMException('NotAllowedError'));
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+    // Let the rejected promise propagate.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(manager.hasBlockedPlayback).toBe(true);
+    expect(events).toEqual([true]);
+
+    playSpy.mockRestore();
+    manager.dispose();
+  });
+
+  it('resumeBlockedPlayback retries blocked elements and clears state when play() resolves', async () => {
+    const events: boolean[] = [];
+    const manager = new PlaybackManager({
+      onPlaybackBlockedChange: (blocked) => events.push(blocked),
+    });
+    manager.bindContainer(container);
+
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValueOnce(new DOMException('NotAllowedError'));
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(manager.hasBlockedPlayback).toBe(true);
+    expect(events).toEqual([true]);
+
+    playSpy.mockResolvedValueOnce(undefined);
+    await manager.resumeBlockedPlayback();
+
+    expect(manager.hasBlockedPlayback).toBe(false);
+    expect(events).toEqual([true, false]);
+
+    playSpy.mockRestore();
+    manager.dispose();
+  });
+
+  it('removing the only blocked track clears blocked state and fires callback with false', async () => {
+    const events: boolean[] = [];
+    const manager = new PlaybackManager({
+      onPlaybackBlockedChange: (blocked) => events.push(blocked),
+    });
+    manager.bindContainer(container);
+
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValue(new DOMException('NotAllowedError'));
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(manager.hasBlockedPlayback).toBe(true);
+
+    manager.removeRemoteAudioTrack('t1');
+
+    expect(manager.hasBlockedPlayback).toBe(false);
+    expect(events).toEqual([true, false]);
+
+    playSpy.mockRestore();
+    manager.dispose();
+  });
+
+  it('setRemoteAudioMuted(true) does not clear blocked playback state', async () => {
+    const events: boolean[] = [];
+    const manager = new PlaybackManager({
+      onPlaybackBlockedChange: (blocked) => events.push(blocked),
+    });
+    manager.bindContainer(container);
+
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValue(new DOMException('NotAllowedError'));
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(manager.hasBlockedPlayback).toBe(true);
+
+    manager.setRemoteAudioMuted(true);
+
+    expect(manager.hasBlockedPlayback).toBe(true);
+    expect(events).toEqual([true]);
+
+    playSpy.mockRestore();
+    manager.dispose();
+  });
+
+  it('dispose clears blocked state', async () => {
+    const events: boolean[] = [];
+    const manager = new PlaybackManager({
+      onPlaybackBlockedChange: (blocked) => events.push(blocked),
+    });
+    manager.bindContainer(container);
+
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValue(new DOMException('NotAllowedError'));
+
+    manager.addRemoteAudioTrack('t1', mockMediaStreamTrack());
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(manager.hasBlockedPlayback).toBe(true);
+
+    manager.dispose();
+    expect(manager.hasBlockedPlayback).toBe(false);
+
+    playSpy.mockRestore();
+  });
 });

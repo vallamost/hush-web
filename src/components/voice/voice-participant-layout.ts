@@ -10,6 +10,52 @@ type OrderableTrackRef = {
   participant: { joinedAt?: Date | null }
 }
 
+type DedupableTrackRef = {
+  participant: { identity?: string | null }
+  source: unknown
+  publication?: unknown
+}
+
+/**
+ * Collapse duplicate track references emitted by `useTracks` for the
+ * same (participant identity, source) pair.
+ *
+ * Under healthy conditions the LiveKit hook never repeats a pair, but
+ * we have one reproducible report (Linux Chromium, peer with webcam
+ * on) where a single participant rendered three tiles. The most
+ * plausible cause is the placeholder track and the real publication
+ * coexisting for a moment after camera enablement, with a stale
+ * publication added on top. Rather than chase the LiveKit internals,
+ * this helper enforces the invariant directly: at most one tile per
+ * (identity, source). When a duplicate is observed, the entry with a
+ * real `publication` wins over a placeholder so the user sees actual
+ * media.
+ *
+ * Pure function so it can be unit-tested without livekit-client.
+ */
+export function dedupTracksByIdentitySource<T extends DedupableTrackRef>(
+  tracks: readonly T[]
+): T[] {
+  const winners = new Map<string, T>()
+  const order: string[] = []
+  for (const track of tracks) {
+    const identity = track.participant?.identity ?? ""
+    const key = `${identity}::${String(track.source)}`
+    const existing = winners.get(key)
+    if (!existing) {
+      winners.set(key, track)
+      order.push(key)
+      continue
+    }
+    const existingHasPub = Boolean(existing.publication)
+    const candidateHasPub = Boolean(track.publication)
+    if (candidateHasPub && !existingHasPub) {
+      winners.set(key, track)
+    }
+  }
+  return order.map((key) => winners.get(key) as T)
+}
+
 /**
  * Returns row buckets for `count` voice tiles. The last incomplete row is
  * centered by the grid renderer.

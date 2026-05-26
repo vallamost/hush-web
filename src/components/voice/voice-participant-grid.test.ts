@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest"
 import {
   computeRows,
+  dedupTracksByIdentitySource,
   orderTracksForStackedLayout,
 } from "./voice-participant-layout"
 
@@ -89,5 +90,72 @@ describe("orderTracksForStackedLayout", () => {
     const beforeLabels = input.map((t) => t.label)
     orderTracksForStackedLayout(input)
     expect(input.map((t) => t.label)).toEqual(beforeLabels)
+  })
+})
+
+describe("dedupTracksByIdentitySource", () => {
+  const track = (
+    identity: string,
+    source: string,
+    publication?: { sid: string } | null,
+    tag?: string,
+  ) => ({
+    participant: { identity },
+    source,
+    publication: publication ?? undefined,
+    tag,
+  })
+
+  it("returns the input unchanged when every (identity, source) pair is unique", () => {
+    const tracks = [
+      track("alice", "camera", { sid: "a-cam" }, "1"),
+      track("alice", "screen_share", { sid: "a-ss" }, "2"),
+      track("bob", "camera", { sid: "b-cam" }, "3"),
+    ]
+    const result = dedupTracksByIdentitySource(tracks)
+    expect(result.map((t) => t.tag)).toEqual(["1", "2", "3"])
+  })
+
+  it("collapses repeats of the same (identity, source) pair", () => {
+    const tracks = [
+      track("alice", "camera", { sid: "a-cam-old" }, "stale"),
+      track("alice", "camera", { sid: "a-cam-new" }, "fresh"),
+      track("alice", "camera", { sid: "a-cam-old2" }, "ghost"),
+    ]
+    const result = dedupTracksByIdentitySource(tracks)
+    expect(result).toHaveLength(1)
+  })
+
+  it("prefers a real publication over a placeholder entry", () => {
+    const placeholder = track("alice", "camera", null, "placeholder")
+    const real = track("alice", "camera", { sid: "a-cam" }, "real")
+    expect(
+      dedupTracksByIdentitySource([placeholder, real]).map((t) => t.tag),
+    ).toEqual(["real"])
+    expect(
+      dedupTracksByIdentitySource([real, placeholder]).map((t) => t.tag),
+    ).toEqual(["real"])
+  })
+
+  it("preserves first-seen order for kept entries", () => {
+    const tracks = [
+      track("alice", "screen_share", { sid: "a-ss" }, "a-ss"),
+      track("bob", "camera", { sid: "b-cam" }, "b-cam"),
+      track("alice", "screen_share", { sid: "a-ss-dup" }, "dup"),
+      track("alice", "camera", { sid: "a-cam" }, "a-cam"),
+    ]
+    expect(
+      dedupTracksByIdentitySource(tracks).map((t) => t.tag),
+    ).toEqual(["a-ss", "b-cam", "a-cam"])
+  })
+
+  it("treats missing identity as a single empty bucket", () => {
+    const tracks = [
+      track("", "camera", { sid: "1" }, "first"),
+      track("", "camera", { sid: "2" }, "second"),
+    ]
+    expect(
+      dedupTracksByIdentitySource(tracks).map((t) => t.tag),
+    ).toEqual(["first"])
   })
 })

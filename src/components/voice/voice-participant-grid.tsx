@@ -8,6 +8,7 @@ import { VoiceParticipantTile } from "./voice-participant-tile"
 import { VoiceLonelyTile } from "./voice-lonely-tile"
 import {
   computeRows,
+  dedupTracksByIdentitySource,
   orderTracksForStackedLayout,
   pickExpandedSize,
   pickTileSize,
@@ -65,15 +66,23 @@ export function VoiceParticipantGrid({
     { onlySubscribed: false }
   )
 
-  const isLonely = rawTracks.length <= 1
+  // HUSHHQ-78: defensively collapse any duplicates emitted for the
+  // same (participant identity, source). Healthy useTracks output has
+  // none; this guards against the Linux/webcam-on triple-tile report.
+  // No-op under normal conditions.
+  const dedupedTracks = React.useMemo(
+    () => dedupTracksByIdentitySource(rawTracks),
+    [rawTracks]
+  )
+  const isLonely = dedupedTracks.length <= 1
   // Re-order tracks for the stacked two-tile layouts so the first
   // joiner is at index 0 (visually on top). orderTracksForStackedLayout
   // is a no-op for any other count, so 3+ participant layouts keep
   // their row-major order — shuffling tiles between rows on every
   // join/leave would defeat the existing centred-last-row layout.
   const tracks = React.useMemo(
-    () => orderTracksForStackedLayout(rawTracks),
-    [rawTracks]
+    () => orderTracksForStackedLayout(dedupedTracks),
+    [dedupedTracks]
   )
   const rows = React.useMemo(() => {
     const visibleCount = isLonely ? 2 : tracks.length

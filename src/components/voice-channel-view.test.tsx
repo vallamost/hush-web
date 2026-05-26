@@ -20,7 +20,7 @@
  *    subscriber re-fires the diff effect.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
-import { act, render, cleanup, waitFor } from "@testing-library/react"
+import { act, render, cleanup, screen, waitFor } from "@testing-library/react"
 
 beforeEach(() => {
   if (typeof globalThis.MediaStream === "undefined") {
@@ -68,6 +68,8 @@ const roomMock = vi.hoisted(() => {
     watchScreen: vi.fn(),
     unwatchScreen: vi.fn(),
     playbackManager,
+    isRemoteAudioPlaybackBlocked: false,
+    resumeRemoteAudioPlayback: vi.fn().mockResolvedValue(undefined),
     room: null,
   }
   return { api, handlers, playbackManager }
@@ -118,12 +120,14 @@ vi.mock("@livekit/components-styles", () => ({}))
 const controlsProps: {
   onToggleScreen?: () => void
   onToggleWebcam?: () => void
+  onToggleDeafen?: () => void
 } = {}
 
 vi.mock("@/components/voice/voice-controls-bar", () => ({
   VoiceControlsBar: (props: typeof controlsProps) => {
     controlsProps.onToggleScreen = props.onToggleScreen
     controlsProps.onToggleWebcam = props.onToggleWebcam
+    controlsProps.onToggleDeafen = props.onToggleDeafen
     return null
   },
 }))
@@ -221,6 +225,8 @@ function setRoomReady(ready: boolean) {
 
 function resetRoomMock() {
   roomMock.api.isReady = false
+  roomMock.api.isRemoteAudioPlaybackBlocked = false
+  roomMock.api.resumeRemoteAudioPlayback.mockClear().mockResolvedValue(undefined)
   roomMock.api.connectRoom.mockClear().mockResolvedValue(undefined)
   roomMock.api.disconnectRoom.mockClear().mockResolvedValue(undefined)
   roomMock.api.publishMic.mockClear().mockResolvedValue(undefined)
@@ -723,5 +729,83 @@ describe("VoiceChannelView — prejoin prefs scoped by instance origin", () => {
     // No auto-publish — the user has not confirmed prejoin for this
     // origin yet.
     expect(roomMock.api.publishMic).not.toHaveBeenCalled()
+  })
+})
+
+// HUSHHQ-78: visible "Enable audio" affordance when remote playback
+// is blocked by the browser's autoplay policy after join.
+describe("VoiceChannelView — remote audio playback blocked prompt", () => {
+  beforeEach(async () => {
+    await saveVoiceDevicePrefs("user-1", {
+      audioDeviceId: null,
+      videoDeviceId: null,
+      outputDeviceId: null,
+      audioEnabled: true,
+      videoEnabled: false,
+      dontAskAgain: true,
+    })
+  })
+
+  async function mountWithBlockedFlag(blocked: boolean) {
+    roomMock.api.isRemoteAudioPlaybackBlocked = blocked
+    const result = await mount()
+    // Wait for the auto-publish path to flip `hasJoined` so the
+    // post-join affordance becomes reachable.
+    await waitFor(() => {
+      expect(roomMock.api.publishMic).toHaveBeenCalled()
+    })
+    // Re-render so the latest blocked flag drives the JSX gate.
+    await act(async () => {
+      roomMock.api.isRemoteAudioPlaybackBlocked = blocked
+      result.rerender(
+        <VoiceChannelView
+          channel={CHANNEL}
+          serverId="srv-1"
+          getToken={() => "tok"}
+          wsClient={WS_CLIENT}
+          onLeave={vi.fn()}
+        />
+      )
+      await Promise.resolve()
+    })
+    return result
+  }
+
+  it("shows the Enable audio button when blocked and not deafened", async () => {
+    await mountWithBlockedFlag(true)
+    expect(
+      screen.queryByRole("button", { name: /enable audio/i })
+    ).not.toBeNull()
+    expect(screen.queryByText(/audio playback is blocked/i)).not.toBeNull()
+  })
+
+  it("does not show the Enable audio button when blocked but deafened", async () => {
+    await mountWithBlockedFlag(true)
+    // Flip the local deafen toggle (exposed via VoiceControlsBar mock).
+    expect(controlsProps.onToggleDeafen).toBeTypeOf("function")
+    await act(async () => {
+      controlsProps.onToggleDeafen?.()
+      await Promise.resolve()
+    })
+    expect(
+      screen.queryByRole("button", { name: /enable audio/i })
+    ).toBeNull()
+  })
+
+  it("does not show the Enable audio button when not blocked", async () => {
+    await mountWithBlockedFlag(false)
+    expect(
+      screen.queryByRole("button", { name: /enable audio/i })
+    ).toBeNull()
+  })
+
+  it("clicking Enable audio calls room.resumeRemoteAudioPlayback", async () => {
+    await mountWithBlockedFlag(true)
+    const button = screen.getByRole("button", { name: /enable audio/i })
+    await act(async () => {
+      button.click()
+      await Promise.resolve()
+    })
+    expect(roomMock.api.resumeRemoteAudioPlayback).toHaveBeenCalledTimes(1)
   })
 })

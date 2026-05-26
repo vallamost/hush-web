@@ -117,6 +117,11 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const [availableScreens, setAvailableScreens] = useState(new Map());
   const [watchedScreens, setWatchedScreens] = useState(new Set());
   const [loadingScreens, setLoadingScreens] = useState(new Set());
+  // HUSHHQ-78: surfaces autoplay rejection so the voice surface can
+  // render a visible "Enable audio" affordance. Driven by the
+  // PlaybackManager callback wired through `createPlaybackManager`.
+  const [isRemoteAudioPlaybackBlocked, setIsRemoteAudioPlaybackBlocked] =
+    useState(false);
 
   // ─── Refs ─────────────────────────────────────────────
   const roomRef = useRef(null);
@@ -141,7 +146,23 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
   const observerUnsubRef = useRef(null);
 
   // ─── Playback Manager ───────────────────────────────
-  const playbackManagerRef = useRef(new PlaybackManager());
+  // Factory keeps every PlaybackManager instance wired to the same
+  // blocked-playback listener, so reconnects (which replace the
+  // manager) preserve the UI signal. `setIsRemoteAudioPlaybackBlocked`
+  // is referentially stable.
+  const createPlaybackManager = useCallback(
+    () =>
+      new PlaybackManager({
+        onPlaybackBlockedChange: (blocked) => {
+          setIsRemoteAudioPlaybackBlocked(blocked);
+        },
+      }),
+    [],
+  );
+  const playbackManagerRef = useRef(null);
+  if (playbackManagerRef.current === null) {
+    playbackManagerRef.current = createPlaybackManager();
+  }
 
   // ─── Debounced State Updates ──────────────────────────
   const pendingLocalTracksUpdateRef = useRef(false);
@@ -276,7 +297,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           roomRef.current = null;
           // Clear stale playback elements from the previous room session.
           playbackManagerRef.current.dispose();
-          playbackManagerRef.current = new PlaybackManager();
+          playbackManagerRef.current = createPlaybackManager();
         }
         // Cancel any in-flight voice WS listeners from a previous session
         if (voiceWsUnsubscribeRef.current) {
@@ -881,7 +902,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       setVoiceReconnectFailed(false);
       // Dispose playback even when room ref is already gone.
       playbackManagerRef.current.dispose();
-      playbackManagerRef.current = new PlaybackManager();
+      playbackManagerRef.current = createPlaybackManager();
       return;
     }
 
@@ -896,7 +917,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
       // Dispose playback manager to remove any stale audio elements.
       // A fresh manager is created so subsequent connectRoom calls start clean.
       playbackManagerRef.current.dispose();
-      playbackManagerRef.current = new PlaybackManager();
+      playbackManagerRef.current = createPlaybackManager();
 
       // Destroy local voice group state (fire-and-forget - server handles group
       // deletion when the last participant leaves via the LiveKit webhook)
@@ -1097,6 +1118,16 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     orchestratorRef.current?.updateFilterSettings(settings);
   }, []);
 
+  /**
+   * Retries playback for every blocked remote audio element. Intended
+   * to be invoked from a user gesture (the in-call "Enable audio"
+   * affordance) so the browser grants the play() call. Safe to call
+   * when nothing is blocked — the manager no-ops.
+   */
+  const resumeRemoteAudioPlayback = useCallback(async () => {
+    await playbackManagerRef.current?.resumeBlockedPlayback();
+  }, []);
+
   // ─── Watch Screen Share ───────────────────────────────
   const watchScreen = useCallback(
     async (trackSid) => {
@@ -1213,6 +1244,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     updateMicFilterSettings,
     // Playback
     playbackManager: playbackManagerRef.current,
+    isRemoteAudioPlaybackBlocked,
+    resumeRemoteAudioPlayback,
     // Click-to-watch
     availableScreens,
     watchedScreens,
