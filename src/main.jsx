@@ -8,6 +8,7 @@ import App from './App';
 import { queryClient } from './lib/queryClient.ts';
 import { registerPWA } from './lib/pwaUpdate';
 import { applyStoredAppearancePreferences } from './lib/appearancePreferences.ts';
+import { getRendererDiagnosticLog } from './lib/diagnosticLog';
 import {
   markDesktopShellDocument,
   signalDesktopRendererReady,
@@ -20,6 +21,11 @@ import './styles/global.css';
 // Register the PWA Service Worker. Fire-and-forget — the function itself
 // guards against unsupported environments. Registration failures are
 // non-fatal: the Update Required dialog still works via its fallback path.
+// HUSHHQ-79: initialize the diagnostic ring buffer + global capture
+// once at boot. The buffer is in-memory only and never leaves the
+// device unless the user explicitly attaches it to a bug report.
+getRendererDiagnosticLog();
+
 registerPWA();
 markDesktopShellDocument();
 applyStoredAppearancePreferences();

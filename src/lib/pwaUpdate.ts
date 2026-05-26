@@ -19,6 +19,7 @@ import {
   setWaitingUpdateSW,
 } from "./updateRequired";
 import { registerSW } from "virtual:pwa-register";
+import { recordClientDiagnostic } from "./clientDiagnostics";
 
 /**
  * Register the Service Worker via vite-plugin-pwa. Idempotent — calling it
@@ -54,10 +55,22 @@ export function registerPWA(): void {
         setWaitingUpdateSW(async () => {
           await updateSW(true);
         });
+        recordClientDiagnostic({
+          category: "update",
+          event: "sw-need-refresh",
+          severity: "info",
+          details: {},
+        });
         requestUpdate({ reason: "sw-need-refresh" });
       },
       onRegisterError(err: unknown) {
         // SW registration failure is non-fatal for the app. Log and move on.
+        recordClientDiagnostic({
+          category: "update",
+          event: "sw-register-failed",
+          severity: "warn",
+          details: { message: err instanceof Error ? err.message : String(err) },
+        });
         // eslint-disable-next-line no-console
         console.warn("[pwa] registration failed", err);
       },

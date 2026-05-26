@@ -33,6 +33,26 @@ function fieldNameTokens(key) {
     .filter(Boolean)
 }
 
+// HUSHHQ-79: extra rules layered on top of the field-name redactor.
+// Order matters — match the most specific patterns first so a path
+// embedded in a query string is replaced as a path, not as a generic
+// signed-URL parameter.
+const LOCAL_PATH_PATTERN =
+  /(?:file:\/\/|[A-Za-z]:\\|\/Users\/|\/home\/|\/root\/|\/var\/folders\/)[^\s"'<>]+/g
+const SIGNED_URL_PARAM_PATTERN =
+  /([?&](?:[Ss]ignature|[Xx]-[Aa]mz-[Ss]ignature|sig|token|auth|key)=)[^&\s"'<>]+/g
+const EMAIL_PATTERN =
+  /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
+// Conservative BIP39: 12 or 24 lowercase ASCII words separated by single
+// spaces. We avoid lookbehind to stay compatible with older runtimes.
+const MNEMONIC_PATTERN =
+  /\b(?:[a-z]{3,8}\s+){11,23}[a-z]{3,8}\b/g
+// Long hex / base64 blobs (>= 48 chars) almost always represent keys,
+// MLS payloads, or signed envelopes in this codebase. Be conservative —
+// shorter values may be legitimate user content.
+const KEY_BLOB_PATTERN =
+  /\b(?:[A-Fa-f0-9]{48,}|[A-Za-z0-9+/=_-]{64,})\b/g
+
 function redactString(value) {
   return trimPartialRedactionMarker(
     value
@@ -48,6 +68,11 @@ function redactString(value) {
       )
       .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTION_MARKER}`)
       .replace(/\b[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g, "[jwt]")
+      .replace(LOCAL_PATH_PATTERN, "[path]")
+      .replace(SIGNED_URL_PARAM_PATTERN, `$1${REDACTION_MARKER}`)
+      .replace(MNEMONIC_PATTERN, "[mnemonic redacted]")
+      .replace(KEY_BLOB_PATTERN, "[key-blob redacted]")
+      .replace(EMAIL_PATTERN, "[email]")
       .slice(0, PREVIEW_LIMIT)
   )
 }

@@ -1,4 +1,5 @@
 import { CLIENT_VERSION } from "./clientVersion"
+import { sanitizeDiagnosticDetails } from "./clientDiagnostics"
 import {
   BUG_REPORT_ARCH_SET,
   BUG_REPORT_CLIENT_KIND_SET,
@@ -11,6 +12,7 @@ import {
   DEFAULT_BUG_REPORT_APP_SURFACE,
   type BugReportArch,
   type BugReportClientKind,
+  type BugReportDiagnosticEntry,
   type BugReportInput,
   type BugReportLifecycleState,
   type BugReportPlatform,
@@ -27,6 +29,7 @@ export {
   DEFAULT_BUG_REPORT_APP_SURFACE,
   type BugReportArch,
   type BugReportClientKind,
+  type BugReportDiagnosticEntry,
   type BugReportInput,
   type BugReportLifecycleState,
   type BugReportPlatform,
@@ -34,6 +37,81 @@ export {
   type BugReportType,
   type BugReportValidationError,
 } from "./bugReportContract"
+
+/**
+ * Upper bound on attached diagnostic events. Keeps the payload small
+ * even if a future caller forgets to cap the ring buffer.
+ */
+export const BUG_REPORT_DIAGNOSTIC_MAX_ENTRIES = 200
+
+/**
+ * Identifier-like keys that must never leave the device through a bug
+ * report. The existing payload contract test enforces this on the
+ * top-level payload; we apply the same rule to diagnostic entries so
+ * the diagnostic stream cannot reintroduce an identifier leak.
+ */
+const FORBIDDEN_DIAGNOSTIC_KEY_FRAGMENTS = [
+  "userid",
+  "username",
+  "deviceid",
+  "channelid",
+  "serverid",
+  "messageid",
+  "ipaddress",
+  "publickey",
+  "token",
+  "logs",
+]
+
+function isIdentifierLikeKey(key: string): boolean {
+  const normalized = key.toLowerCase()
+  return FORBIDDEN_DIAGNOSTIC_KEY_FRAGMENTS.some((fragment) =>
+    normalized.includes(fragment)
+  )
+}
+
+function stripIdentifierLikeKeys(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => stripIdentifierLikeKeys(entry, seen))
+  }
+  if (value && typeof value === "object") {
+    if (seen.has(value)) return "[circular]"
+    seen.add(value)
+    const result: Record<string, unknown> = {}
+    for (const [key, entry] of Object.entries(value)) {
+      if (isIdentifierLikeKey(key)) continue
+      result[key] = stripIdentifierLikeKeys(entry, seen)
+    }
+    return result
+  }
+  return value
+}
+
+/**
+ * Re-runs every diagnostic entry through the renderer redactor so the
+ * payload never escapes with a missed token, mnemonic, signed URL, or
+ * local path — even if the original emitter forgot to sanitize. Also
+ * strips identifier-like keys (channelId, userId, etc.) at the payload
+ * boundary so the diagnostic stream cannot quietly reintroduce them.
+ */
+export function redactDiagnosticEntriesForUpload(
+  entries: readonly BugReportDiagnosticEntry[]
+): BugReportDiagnosticEntry[] {
+  const limited = entries.slice(-BUG_REPORT_DIAGNOSTIC_MAX_ENTRIES)
+  return limited.map((entry) => {
+    const sanitized =
+      entry.details && typeof entry.details === "object"
+        ? (sanitizeDiagnosticDetails(entry.details) as Record<string, unknown>)
+        : {}
+    return {
+      ts: entry.ts,
+      category: entry.category,
+      event: entry.event,
+      severity: entry.severity,
+      details: stripIdentifierLikeKeys(sanitized) as Record<string, unknown>,
+    }
+  })
+}
 
 export const BUG_REPORT_ENDPOINT = (() => {
   // Vite injects `import.meta.env.VITE_*` at build time. Typed loosely
@@ -213,6 +291,9 @@ export function buildBugReportPayload(input: BugReportInput): Record<string, unk
   }
   if (typeof input.steps === "string" && input.steps.trim().length > 0) {
     payload.steps = input.steps.trim()
+  }
+  if (Array.isArray(input.diagnosticLog) && input.diagnosticLog.length > 0) {
+    payload.diagnosticLog = redactDiagnosticEntriesForUpload(input.diagnosticLog)
   }
   return payload
 }

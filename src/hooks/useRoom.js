@@ -19,6 +19,7 @@ import { CaptureOrchestrator } from '../audio/capture/CaptureOrchestrator';
 import { LiveKitRoomAdapter } from '../audio/adapters/LiveKitRoomAdapter';
 import { CAPTURE_PROFILES, resolveMode, isMobileWebAudio } from '../audio';
 import { PlaybackManager } from '../audio/playback/PlaybackManager';
+import { recordClientDiagnostic } from '../lib/clientDiagnostics';
 import { getActiveAuthInstanceUrlSync, normalizeInstanceUrl } from '../lib/authInstanceStore';
 import { buildLiveKitWsUrl } from '../lib/livekitUrl';
 
@@ -264,7 +265,19 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
     async (roomName, displayName, channelId) => {
       const epoch = ++connectionEpochRef.current;
       const isStale = () => epoch !== connectionEpochRef.current;
+      recordClientDiagnostic({
+        category: 'voice',
+        event: 'join-attempt',
+        severity: 'info',
+        details: { channelId },
+      });
       if (!wsClient) {
+        recordClientDiagnostic({
+          category: 'voice',
+          event: 'join-failed',
+          severity: 'error',
+          details: { channelId, reason: 'ws-not-connected' },
+        });
         setError('WebSocket not connected. Please try again.');
         return;
       }
@@ -624,6 +637,12 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // above after MLS key derivation succeeded.
         room.on(RoomEvent.Connected, () => {
           if (isStale()) return;
+          recordClientDiagnostic({
+            category: 'voice',
+            event: 'livekit-connected',
+            severity: 'info',
+            details: { channelId: channelIdRef.current },
+          });
         });
 
         // Reconnecting: LiveKit is attempting to re-establish the WebSocket
@@ -671,6 +690,15 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         room.on(RoomEvent.Disconnected, () => {
           if (isStale()) return;
           console.log('[livekit] Disconnected from room');
+          recordClientDiagnostic({
+            category: 'voice',
+            event: 'livekit-disconnected',
+            severity: 'info',
+            details: {
+              channelId: channelIdRef.current,
+              reconnectAttempts: reconnectAttemptCountRef.current,
+            },
+          });
           setIsReady(false);
           // If 3 or more reconnect attempts preceded this disconnect, surface the
           // manual "Rejoin" prompt instead of a generic error.
