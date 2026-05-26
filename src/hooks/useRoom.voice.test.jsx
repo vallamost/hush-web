@@ -1299,4 +1299,97 @@ describe('useRoom playback manager integration', () => {
 
     expect(result.current.playbackManager.trackCount).toBe(0);
   });
+
+  // ─── HUSHHQ-78: blocked playback surfacing ──────────
+
+  it('rejected audio play() surfaces isRemoteAudioPlaybackBlocked=true through the hook', async () => {
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValue(new DOMException('NotAllowedError'));
+    try {
+      const { result } = renderHook(() =>
+        useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+      );
+
+      await act(async () => {
+        await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      });
+
+      // Bind a real container so the manager appends + plays.
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      await act(async () => {
+        result.current.playbackManager.bindContainer(container);
+      });
+
+      const room = capturedRooms[capturedRooms.length - 1];
+      await act(async () => {
+        room.emit(
+          'trackSubscribed',
+          {
+            sid: 'remote-audio-1',
+            kind: 'audio',
+            mediaStreamTrack: { kind: 'audio', readyState: 'live' },
+          },
+          { source: 'microphone' },
+          { identity: 'alice' },
+        );
+        // Let the rejected play() promise drain through React state.
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(result.current.isRemoteAudioPlaybackBlocked).toBe(true);
+    } finally {
+      playSpy.mockRestore();
+    }
+  });
+
+  it('resumeRemoteAudioPlayback retries and clears the blocked flag when play() resolves', async () => {
+    const playSpy = vi
+      .spyOn(HTMLAudioElement.prototype, 'play')
+      .mockRejectedValueOnce(new DOMException('NotAllowedError'));
+    try {
+      const { result } = renderHook(() =>
+        useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+      );
+
+      await act(async () => {
+        await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+      });
+
+      const container = document.createElement('div');
+      document.body.appendChild(container);
+      await act(async () => {
+        result.current.playbackManager.bindContainer(container);
+      });
+
+      const room = capturedRooms[capturedRooms.length - 1];
+      await act(async () => {
+        room.emit(
+          'trackSubscribed',
+          {
+            sid: 'remote-audio-1',
+            kind: 'audio',
+            mediaStreamTrack: { kind: 'audio', readyState: 'live' },
+          },
+          { source: 'microphone' },
+          { identity: 'alice' },
+        );
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      expect(result.current.isRemoteAudioPlaybackBlocked).toBe(true);
+
+      playSpy.mockResolvedValueOnce(undefined);
+      await act(async () => {
+        await result.current.resumeRemoteAudioPlayback();
+      });
+
+      expect(result.current.isRemoteAudioPlaybackBlocked).toBe(false);
+    } finally {
+      playSpy.mockRestore();
+    }
+  });
 });

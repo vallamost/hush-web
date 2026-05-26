@@ -126,6 +126,8 @@ interface RoomApi {
   watchScreen: (producerId: string) => void
   unwatchScreen: (producerId: string) => void
   playbackManager: PlaybackManagerLike | null
+  isRemoteAudioPlaybackBlocked: boolean
+  resumeRemoteAudioPlayback: () => Promise<void> | void
   /** The underlying livekit-client `Room` instance the MLS frame
    *  transformer is attached to. Passed into `RoomContext.Provider`
    *  so `@livekit/components-react` hooks read from the same Room. */
@@ -930,6 +932,34 @@ export function VoiceChannelView({
               <MaximizeIcon className="size-4" />
             )}
           </button>
+        ) : null}
+        {hasJoined && !isDeafened && room.isRemoteAudioPlaybackBlocked ? (
+          // HUSHHQ-78: Browsers (notably Chromium on Linux) reject the
+          // remote audio play() when the user-activation window from
+          // the join click has elapsed by the time the first remote
+          // track arrives. Render a small, calm prompt so the user can
+          // grant playback with a deliberate gesture; suppressed while
+          // deafened because the user has intentionally muted output.
+          <div
+            role="status"
+            aria-live="polite"
+            className={cn(
+              "absolute left-1/2 top-3 z-30 flex -translate-x-1/2 items-center gap-3 rounded-full border bg-background/95 px-3 py-1.5 text-xs text-foreground shadow-sm backdrop-blur transition-opacity duration-200",
+              hideChrome && "pointer-events-none opacity-0"
+            )}
+          >
+            <span>Audio playback is blocked.</span>
+            <Button
+              type="button"
+              size="sm"
+              variant="default"
+              onClick={() => {
+                void room.resumeRemoteAudioPlayback()
+              }}
+            >
+              Enable audio
+            </Button>
+          </div>
         ) : null}
         {hasJoined ? (
           <div
