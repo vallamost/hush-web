@@ -60,12 +60,33 @@ export interface BugReportTelemetry {
   appSurface: string
 }
 
+/**
+ * Single diagnostic event captured by the renderer ring buffer. Mirrors
+ * `DiagnosticEntry` in `diagnosticLog.ts` but kept here so the contract
+ * module has no transitive dependency on the runtime buffer (the
+ * server-side validator can import this without pulling in browser-only
+ * code).
+ */
+export interface BugReportDiagnosticEntry {
+  ts: string
+  category: string
+  event: string
+  severity: "info" | "warn" | "error"
+  details: Record<string, unknown>
+}
+
 export interface BugReportInput {
   type: BugReportType
   title?: string
   description: string
   steps?: string
   telemetry: BugReportTelemetry
+  /**
+   * Opt-in diagnostic log attached by the user. Each entry has already
+   * been passed through the renderer redactor; the upload path runs
+   * the sanitizer again as defense in depth.
+   */
+  diagnosticLog?: BugReportDiagnosticEntry[]
 }
 
 export interface BugReportValidationError {

@@ -134,4 +134,54 @@ describe("client diagnostics", () => {
       details: { operation: "verifyDeviceLinkRequest" },
     })
   })
+
+  // HUSHHQ-79: extended redaction categories for the diagnostic log.
+
+  it("redacts BIP39-shaped mnemonic sequences", () => {
+    const mnemonic =
+      "abandon ability able about above absent absorb abstract absurd abuse access accident"
+    const { note } = sanitizeDiagnosticDetails({ note: mnemonic })
+    expect(note).not.toContain("abandon ability")
+    expect(note).toContain("[mnemonic redacted]")
+  })
+
+  it("redacts long hex / base64 key-shaped blobs", () => {
+    const hexKey = "a".repeat(64)
+    const b64Key = "AAAA".repeat(20)
+    expect(sanitizeDiagnosticDetails({ note: hexKey }).note).not.toContain(hexKey)
+    expect(sanitizeDiagnosticDetails({ note: hexKey }).note).toContain(
+      "[key-blob redacted]"
+    )
+    expect(sanitizeDiagnosticDetails({ note: b64Key }).note).toContain(
+      "[key-blob redacted]"
+    )
+  })
+
+  it("redacts email addresses", () => {
+    expect(
+      sanitizeDiagnosticDetails({ note: "contact alice@example.com please" })
+        .note
+    ).toContain("[email]")
+  })
+
+  it("redacts local filesystem paths", () => {
+    expect(
+      sanitizeDiagnosticDetails({ note: "failed at /Users/yarin/secret/file" })
+        .note
+    ).toContain("[path]")
+    expect(
+      sanitizeDiagnosticDetails({ note: "C:\\Users\\yarin\\secret" }).note
+    ).toContain("[path]")
+    expect(
+      sanitizeDiagnosticDetails({ note: "from file:///home/x/log.txt" }).note
+    ).toContain("[path]")
+  })
+
+  it("redacts signed URL query parameters", () => {
+    expect(
+      sanitizeDiagnosticDetails({
+        note: "https://cdn/foo?Signature=abcdef1234567890&Expires=999",
+      }).note
+    ).toContain("Signature=[redacted]")
+  })
 })

@@ -24,18 +24,27 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
 
 import {
   BUG_REPORT_TYPES,
+  buildBugReportPayload,
   buildBugReportTelemetry,
   submitBugReport,
+  type BugReportDiagnosticEntry,
   type BugReportInput,
   type BugReportLifecycleState,
   type BugReportSubmitOutcome,
   type BugReportTelemetry,
   type BugReportType,
 } from "@/lib/bugReport"
+import { getRendererDiagnosticLog } from "@/lib/diagnosticLog"
 import { getDesktopBridge } from "@/lib/desktopBridge"
 import type { DesktopRuntimeInfo } from "@/lib/desktopBridge"
 
@@ -80,6 +89,16 @@ export function BugReportDialog({
   const [feedback, setFeedback] = React.useState<string | null>(null)
   const [fieldError, setFieldError] =
     React.useState<{ field: string; message: string } | null>(null)
+  // HUSHHQ-79: diagnostic-log opt-in. Defaults ON so the team gets
+  // useful failure context, but the user keeps full control.
+  const [attachDiagnostics, setAttachDiagnostics] = React.useState(true)
+  const [showDiagnosticPreview, setShowDiagnosticPreview] = React.useState(false)
+  // Take a snapshot when the dialog opens so the preview and the
+  // upload payload reference the same set of entries (the buffer
+  // would otherwise keep growing while the user types).
+  const [diagnosticSnapshot, setDiagnosticSnapshot] = React.useState<
+    BugReportDiagnosticEntry[]
+  >([])
 
   const telemetryDesktopBridge = React.useMemo(() => {
     if (!desktopBridge) return null
@@ -117,6 +136,31 @@ export function BugReportDialog({
     [telemetry]
   )
 
+  // Mirrors exactly what `submitBugReport` will send. Building it from
+  // the same `buildBugReportPayload` helper guarantees the preview and
+  // the wire payload cannot drift.
+  const diagnosticUploadPreview = React.useMemo(() => {
+    if (!attachDiagnostics || diagnosticSnapshot.length === 0) return null
+    const previewPayload = buildBugReportPayload({
+      type,
+      title: title.trim() || undefined,
+      description: description.trim() || "[preview placeholder]",
+      steps: steps.trim() || undefined,
+      telemetry,
+      diagnosticLog: diagnosticSnapshot,
+    })
+    const log = (previewPayload.diagnosticLog ?? []) as BugReportDiagnosticEntry[]
+    return JSON.stringify(log, null, 2)
+  }, [
+    attachDiagnostics,
+    description,
+    diagnosticSnapshot,
+    steps,
+    telemetry,
+    title,
+    type,
+  ])
+
   React.useEffect(() => {
     if (!open) return
     setType("bug")
@@ -126,6 +170,15 @@ export function BugReportDialog({
     setPhase("idle")
     setFeedback(null)
     setFieldError(null)
+    setAttachDiagnostics(true)
+    setShowDiagnosticPreview(false)
+    try {
+      setDiagnosticSnapshot(
+        getRendererDiagnosticLog().snapshot() as BugReportDiagnosticEntry[]
+      )
+    } catch {
+      setDiagnosticSnapshot([])
+    }
   }, [open])
 
   React.useEffect(() => {
@@ -164,6 +217,10 @@ export function BugReportDialog({
         description,
         steps: steps.trim() || undefined,
         telemetry,
+        diagnosticLog:
+          attachDiagnostics && diagnosticSnapshot.length > 0
+            ? diagnosticSnapshot
+            : undefined,
       }
       const outcome: BugReportSubmitOutcome = await submitBugReport(input)
       if (outcome.status === "ok") {
@@ -199,7 +256,9 @@ export function BugReportDialog({
       )
     },
     [
+      attachDiagnostics,
       description,
+      diagnosticSnapshot,
       isTelemetryPending,
       steps,
       submitting,
@@ -325,6 +384,60 @@ export function BugReportDialog({
                 >
                   {telemetryPreview}
                 </pre>
+              </Field>
+
+              {/* HUSHHQ-79: opt-in diagnostic log attachment. */}
+              <Field className="md:col-span-2">
+                <div className="flex items-start justify-between gap-3 rounded-md border bg-muted/30 p-3">
+                  <div className="flex flex-col gap-1">
+                    <FieldLabel
+                      htmlFor="bug-report-attach-diagnostics"
+                      className="font-medium"
+                    >
+                      Attach diagnostic log
+                    </FieldLabel>
+                    <p className="text-xs text-muted-foreground">
+                      {diagnosticSnapshot.length === 0
+                        ? "No recent diagnostic events were recorded."
+                        : `Includes the last ${diagnosticSnapshot.length} captured event${diagnosticSnapshot.length === 1 ? "" : "s"}. Sensitive values are stripped before sending.`}
+                    </p>
+                  </div>
+                  <Switch
+                    id="bug-report-attach-diagnostics"
+                    checked={attachDiagnostics}
+                    onCheckedChange={(next) => setAttachDiagnostics(Boolean(next))}
+                    disabled={submitting || succeeded || diagnosticSnapshot.length === 0}
+                    aria-label="Attach diagnostic log"
+                  />
+                </div>
+                {diagnosticUploadPreview ? (
+                  <Collapsible
+                    open={showDiagnosticPreview}
+                    onOpenChange={setShowDiagnosticPreview}
+                    className="mt-2"
+                  >
+                    <CollapsibleTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs"
+                      >
+                        {showDiagnosticPreview
+                          ? "Hide what gets sent"
+                          : "Preview what gets sent"}
+                      </Button>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <pre
+                        data-testid="bug-report-diagnostic-preview"
+                        className="mt-2 max-h-48 overflow-auto rounded-md border bg-muted/40 p-3 font-mono text-xs leading-snug"
+                      >
+                        {diagnosticUploadPreview}
+                      </pre>
+                    </CollapsibleContent>
+                  </Collapsible>
+                ) : null}
               </Field>
             </FieldGroup>
           </ScrollArea>

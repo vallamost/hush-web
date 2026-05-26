@@ -251,3 +251,117 @@ describe("BUG_REPORT_TYPES", () => {
     ])
   })
 })
+
+// HUSHHQ-79: opt-in diagnostic log attachment.
+describe("buildBugReportPayload with diagnosticLog", () => {
+  it("omits diagnosticLog when none is attached", () => {
+    const payload = buildBugReportPayload(baseInput())
+    expect("diagnosticLog" in payload).toBe(false)
+  })
+
+  it("omits diagnosticLog when the attached array is empty", () => {
+    const payload = buildBugReportPayload(
+      baseInput({ diagnosticLog: [] })
+    )
+    expect("diagnosticLog" in payload).toBe(false)
+  })
+
+  it("attaches a sanitized + identifier-stripped log when provided", () => {
+    const payload = buildBugReportPayload(
+      baseInput({
+        diagnosticLog: [
+          {
+            ts: "2026-05-26T00:00:00.000Z",
+            category: "voice",
+            event: "join-attempt",
+            severity: "info",
+            details: {
+              channelId: "ch-abc",
+              note: "Bearer secret-token",
+              userId: "u-1",
+            },
+          },
+          {
+            ts: "2026-05-26T00:00:01.000Z",
+            category: "console",
+            event: "error",
+            severity: "error",
+            details: {
+              message: "failed at /Users/yarin/secret",
+            },
+          },
+        ],
+      })
+    )
+    const log = payload.diagnosticLog as Array<{
+      details: Record<string, unknown>
+    }>
+    expect(log).toHaveLength(2)
+    expect(log[0].details).not.toHaveProperty("channelId")
+    expect(log[0].details).not.toHaveProperty("userId")
+    expect(String(log[0].details.note)).not.toContain("secret-token")
+    expect(String(log[1].details.message)).toContain("[path]")
+  })
+
+  it("caps the attached log at BUG_REPORT_DIAGNOSTIC_MAX_ENTRIES (keeping newest)", () => {
+    const overflow = Array.from({ length: 250 }, (_, i) => ({
+      ts: `t${i}`,
+      category: "test",
+      event: "ping",
+      severity: "info" as const,
+      details: { i },
+    }))
+    const payload = buildBugReportPayload(
+      baseInput({ diagnosticLog: overflow })
+    )
+    const log = payload.diagnosticLog as Array<{
+      details: { i: number }
+    }>
+    expect(log).toHaveLength(200)
+    expect(log[0].details.i).toBe(50)
+    expect(log[log.length - 1].details.i).toBe(249)
+  })
+
+  it("never emits identifier-like keys in attached diagnostic details", () => {
+    const payload = buildBugReportPayload(
+      baseInput({
+        diagnosticLog: [
+          {
+            ts: "t",
+            category: "voice",
+            event: "any",
+            severity: "info",
+            details: {
+              channelId: "ch",
+              serverId: "srv",
+              messageId: "msg",
+              deviceId: "dev",
+              ipAddress: "1.2.3.4",
+              publicKey: "pk",
+              username: "name",
+              userId: "uid",
+              safe: "ok",
+            },
+          },
+        ],
+      })
+    )
+    const log = payload.diagnosticLog as Array<{ details: Record<string, unknown> }>
+    const forbidden = [
+      "channelid",
+      "serverid",
+      "messageid",
+      "deviceid",
+      "ipaddress",
+      "publickey",
+      "username",
+      "userid",
+    ]
+    for (const key of Object.keys(log[0].details)) {
+      for (const banned of forbidden) {
+        expect(key.toLowerCase()).not.toContain(banned)
+      }
+    }
+    expect(log[0].details.safe).toBe("ok")
+  })
+})
