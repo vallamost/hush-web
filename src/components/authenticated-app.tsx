@@ -119,6 +119,8 @@ import {
   type ServerActionTarget,
 } from "./authenticated-app-server-actions"
 import { shouldLeaveVoiceAfterSelfRemoval } from "./authenticated-app-self-removal"
+import { ChangeAnnouncementDialog } from "@/components/change-announcement-dialog"
+import { useChangeAnnouncement } from "@/hooks/useChangeAnnouncement"
 
 const noopRefetch = async () => {}
 
@@ -235,6 +237,42 @@ export function AuthenticatedApp() {
   const handleSignOut = React.useCallback(async () => {
     await performLogout()
   }, [performLogout])
+
+  // Idle gate for the "What's new" popup. Stays false until the shell
+  // has mounted and the event loop reports an idle slice (or the
+  // fallback timer fires), so the dialog never interrupts the initial
+  // render burst, auth handoff, or vault unlock flows that may queue
+  // synchronous work on first paint.
+  const [isShellIdle, setIsShellIdle] = React.useState(false)
+  React.useEffect(() => {
+    type IdleHost = typeof window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+    const host = window as IdleHost
+    let idleHandle: number | undefined
+    let timeoutHandle: number | undefined
+    if (typeof host.requestIdleCallback === "function") {
+      idleHandle = host.requestIdleCallback(() => setIsShellIdle(true), {
+        timeout: 2000,
+      })
+    } else {
+      timeoutHandle = window.setTimeout(() => setIsShellIdle(true), 800)
+    }
+    return () => {
+      if (idleHandle !== undefined && typeof host.cancelIdleCallback === "function") {
+        host.cancelIdleCallback(idleHandle)
+      }
+      if (timeoutHandle !== undefined) {
+        window.clearTimeout(timeoutHandle)
+      }
+    }
+  }, [])
+
+  const isAuthenticatedUser = Boolean(user?.id)
+  const changeAnnouncement = useChangeAnnouncement({
+    isReady: isAuthenticatedUser && isShellIdle,
+  })
   const {
     getTokenForInstance,
     getWsClient,
@@ -1865,6 +1903,10 @@ export function AuthenticatedApp() {
           await performLogout()
           setIsUserSettingsOpen(false)
         }}
+      />
+      <ChangeAnnouncementDialog
+        entry={changeAnnouncement.entry}
+        onDismiss={changeAnnouncement.dismiss}
       />
     </TooltipProvider>
   )
