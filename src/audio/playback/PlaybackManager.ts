@@ -34,6 +34,8 @@
  * Video elements are NOT managed here — React keeps video ownership.
  */
 
+import { recordClientDiagnostic } from '../../lib/clientDiagnostics';
+
 export interface ManagedAudioTrack {
   sid: string;
   element: HTMLAudioElement;
@@ -202,6 +204,12 @@ export class PlaybackManager {
         if (result && typeof (result as Promise<void>).then === 'function') {
           await result;
         }
+        recordClientDiagnostic({
+          category: 'voice',
+          event: 'audio-playback-resumed',
+          severity: 'info',
+          details: { sid },
+        });
         this._clearBlocked(sid);
       } catch {
         // Stay blocked; the affordance will keep the prompt visible
@@ -288,6 +296,12 @@ export class PlaybackManager {
     if (this._blockedSids.has(sid)) return;
     const wasEmpty = this._blockedSids.size === 0;
     this._blockedSids.add(sid);
+    recordClientDiagnostic({
+      category: 'voice',
+      event: 'audio-playback-blocked',
+      severity: 'warn',
+      details: { sid },
+    });
     if (wasEmpty) this._emitBlockedChange(true);
   }
 

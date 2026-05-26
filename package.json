@@ -1,6 +1,6 @@
 {
   "name": "hush-client",
-  "version": "0.7.0-alpha.17",
+  "version": "0.7.0-alpha.18",
   "private": true,
   "type": "module",
   "scripts": {
