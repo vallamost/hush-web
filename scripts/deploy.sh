@@ -15,19 +15,17 @@
 # following it into the pointed-to directory (the mv -f trap on Linux).
 # Old releases beyond --keep are pruned after a successful deploy.
 #
-# ---- HOSTED TOPOLOGY NOTE -------------------------------------------------
-# On the hosted instance (app.gethush.live), the SPA is served from the same
-# origin as the API. No VITE_* environment variables are required: Vite builds
-# with relative path defaults (/api, /ws, /livekit) which route correctly when
-# served behind the hush-server Caddy reverse proxy.
+# ---- VITE BUILD ENV VARS --------------------------------------------------
+# When the SPA is served from the same origin as the API, no VITE_* env vars
+# are required. Vite builds with relative path defaults (/api, /ws, /livekit)
+# which route correctly through any reverse proxy in front of hush-server.
 #
-# Do NOT set VITE_API_BASE_URL, VITE_WS_URL, or VITE_LIVEKIT_URL for the
-# hosted build — they are only needed for self-hosted instances where the SPA
+# Set VITE_API_BASE_URL, VITE_WS_URL, and VITE_LIVEKIT_URL only when the SPA
 # is served from a different origin than the API.
 #
 # /admin is NOT part of this deploy. The admin UI is embedded in hush-server
 # and is served via the reverse proxy at /admin. Do not include dist-admin/
-# or any admin-specific assets in the hosted client deploy.
+# or any admin-specific assets in the client deploy.
 # ---------------------------------------------------------------------------
 #
 # Exit codes:
@@ -85,7 +83,7 @@ RELEASE_DIR="$TARGET_ABS/releases/$RELEASE"
 # Build
 # ---------------------------------------------------------------------------
 if [ "$BUILD" -eq 1 ]; then
-  log "Building (no VITE_* vars — hosted relative-path defaults)..."
+  log "Building (no VITE_* vars, using relative-path defaults)..."
   npm ci --silent
   npm run build
   log "Build complete."
