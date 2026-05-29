@@ -71,6 +71,20 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
     surfaces: ["web", "desktop"],
     enabled: false,
   },
+  {
+    id: "founder-note-2026-05-29",
+    version: "v0.7.0-alpha.19",
+    title: "A note from the founder",
+    body: "Hush is a solo project, and traffic is booming. Thank you for trying it.",
+    bullets: [
+      "I'm working through your reports and issues in the evenings after my day job.",
+      "Please be patient: fixes are on the way.",
+      "I'm looking for collaborators and active maintainers. Reach out if you're interested.",
+      "All the love xx",
+    ],
+    surfaces: ["web", "desktop"],
+    enabled: true,
+  },
 ]
 
 /**
@@ -113,7 +127,7 @@ export function getBrowserStorage(): ChangeAnnouncementStorage | null {
         try {
           candidate.setItem(key, value)
         } catch {
-          /* swallow — caller already gated on isPersistenceAvailable */
+          /* swallow: caller already gated on isPersistenceAvailable */
         }
       },
     }
