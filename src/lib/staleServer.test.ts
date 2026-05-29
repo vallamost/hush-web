@@ -12,9 +12,28 @@ import {
   MIN_RECOMMENDED_SERVER_VERSION,
   STALE_SERVER_EVENT,
   type StaleServerDetail,
+  type StaleServerStorage,
   isServerStale,
   evaluateServerStaleness,
+  dismissScope,
+  isStaleDismissed,
+  markStaleDismissed,
 } from "./staleServer";
+
+function memoryStorage(): StaleServerStorage {
+  const map = new Map<string, string>();
+  return {
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, v),
+  };
+}
+
+const staleDetail: StaleServerDetail = {
+  instanceHost: "chat.example.tld",
+  serverVersion: "0.1.0",
+  recommended: "0.2.0",
+  reason: "below-recommended",
+};
 
 function captureStaleEvents(): StaleServerDetail[] {
   const seen: StaleServerDetail[] = [];
@@ -94,5 +113,45 @@ describe("evaluateServerStaleness", () => {
     expect(() =>
       evaluateServerStaleness({ server_version: 123 as unknown as string }),
     ).not.toThrow();
+  });
+});
+
+describe("stale-server dismissal persistence", () => {
+  it("is not dismissed until marked", () => {
+    const storage = memoryStorage();
+    expect(isStaleDismissed(staleDetail, storage)).toBe(false);
+    markStaleDismissed(staleDetail, storage);
+    expect(isStaleDismissed(staleDetail, storage)).toBe(true);
+  });
+
+  it("scopes dismissal to instance host and recommended version", () => {
+    const storage = memoryStorage();
+    markStaleDismissed(staleDetail, storage);
+    // Same instance, but this client now recommends a newer server: re-notify.
+    expect(
+      isStaleDismissed({ ...staleDetail, recommended: "0.3.0" }, storage),
+    ).toBe(false);
+    // Different instance: independent dismissal.
+    expect(
+      isStaleDismissed({ ...staleDetail, instanceHost: "other.tld" }, storage),
+    ).toBe(false);
+  });
+
+  it("derives a stable scope string", () => {
+    expect(dismissScope(staleDetail)).toBe("chat.example.tld@0.2.0");
+    expect(dismissScope({ ...staleDetail, instanceHost: null })).toBe("?@0.2.0");
+  });
+
+  it("markStaleDismissed is idempotent and survives unavailable storage", () => {
+    const storage = memoryStorage();
+    markStaleDismissed(staleDetail, storage);
+    expect(() => markStaleDismissed(staleDetail, storage)).not.toThrow();
+    const broken: StaleServerStorage = {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("quota");
+      },
+    };
+    expect(() => markStaleDismissed(staleDetail, broken)).not.toThrow();
   });
 });

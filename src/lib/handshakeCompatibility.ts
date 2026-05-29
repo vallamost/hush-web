@@ -24,6 +24,7 @@ import { getHandshake } from "./api";
 import { CLIENT_VERSION, isClientBelowMinimum } from "./clientVersion";
 import { CURRENT_MLS_CIPHERSUITE } from "./mlsCiphersuite";
 import { requestUpdate } from "./updateRequired";
+import { evaluateServerStaleness } from "./staleServer";
 
 export type HandshakeCompatibilityReason =
   | "min-client-version"
@@ -67,8 +68,8 @@ interface HandshakeShape {
  * Returns the dispatched reason (or null) so callers can chain telemetry.
  *
  * Tolerant of:
- *   - Missing fields (pre-X-Wing server, older deployment) — no event.
- *   - Unparseable `min_client_version` — no event.
+ *   - Missing fields (pre-X-Wing server, older deployment): no event.
+ *   - Unparseable `min_client_version`: no event.
  * Failing closed on these would lock users out of older instances during
  * staged rollouts.
  */
@@ -108,6 +109,18 @@ export function evaluateHandshakeCompatibility(
 }
 
 /**
+ * Best-effort host extraction for the stale-server notice copy. Returns null
+ * when `instanceUrl` cannot be parsed; the notice still renders generically.
+ */
+function hostFromInstanceUrl(instanceUrl: string): string | null {
+  try {
+    return new URL(instanceUrl).host;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Boot-side guard. Fetches the public handshake for `instanceUrl`, runs the
  * compatibility check, and throws `HandshakeCompatibilityError` when the
  * server is incompatible. On success returns the raw handshake payload so
@@ -126,5 +139,12 @@ export async function assertHandshakeCompatible(
   if (mismatch) {
     throw new HandshakeCompatibilityError(mismatch);
   }
+  // Non-blocking: an old but compatible server still serves chat. Raise a
+  // dismissible notice (never throws) so the user can ask their admin to
+  // update, without locking them out of a working instance.
+  evaluateServerStaleness(
+    handshake as { server_version?: string | null },
+    hostFromInstanceUrl(instanceUrl),
+  );
   return handshake;
 }

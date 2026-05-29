@@ -13,6 +13,7 @@ import { useDesktopShell } from './hooks/useDesktopShell';
 import { buildGuildRouteRef } from './lib/slugify';
 import { Toaster } from './components/ui/sonner';
 import { UpdateRequiredDialog } from './components/UpdateRequiredDialog';
+import { StaleServerBanner } from './components/StaleServerBanner';
 
 const UnauthenticatedShell = lazy(() =>
   import('./components/auth/unauthenticated-shell').then((m) => ({
@@ -321,6 +322,7 @@ export default function App() {
             <FaviconThemeSync />
             <DesktopWindowFloorSync />
             <AppBackground />
+            <StaleServerBanner />
             <DesktopShell>
               <AppContent />
             </DesktopShell>

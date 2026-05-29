@@ -86,3 +86,57 @@ export function evaluateServerStaleness(
   }
   return detail;
 }
+
+// Dismissal persistence. A dismissal is scoped to instance host + recommended
+// version, so the banner stays quiet for an instance the user acknowledged but
+// re-appears once this client recommends a newer server than before.
+
+/** Storage key holding the JSON array of dismissed stale-server scopes. */
+export const DISMISSED_STORAGE_KEY = "hush.staleServer.dismissed";
+
+/** Minimal storage contract so tests can inject an in-memory fake. */
+export interface StaleServerStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+/** Stable per-instance, per-recommended dismissal scope. */
+export function dismissScope(detail: StaleServerDetail): string {
+  return `${detail.instanceHost ?? "?"}@${detail.recommended}`;
+}
+
+function readDismissed(storage: StaleServerStorage): Set<string> {
+  const raw = storage.getItem(DISMISSED_STORAGE_KEY);
+  if (!raw) return new Set();
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((v): v is string => typeof v === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+/** True when this exact instance + recommended scope was already dismissed. */
+export function isStaleDismissed(
+  detail: StaleServerDetail,
+  storage: StaleServerStorage,
+): boolean {
+  return readDismissed(storage).has(dismissScope(detail));
+}
+
+/** Persist a dismissal for this instance + recommended scope. Idempotent. */
+export function markStaleDismissed(
+  detail: StaleServerDetail,
+  storage: StaleServerStorage,
+): void {
+  const scope = dismissScope(detail);
+  const current = readDismissed(storage);
+  if (current.has(scope)) return;
+  current.add(scope);
+  try {
+    storage.setItem(DISMISSED_STORAGE_KEY, JSON.stringify([...current]));
+  } catch {
+    /* storage unavailable (private mode/quota); dismissal is best-effort */
+  }
+}
