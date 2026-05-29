@@ -72,6 +72,8 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
     enabled: false,
   },
   {
+    // Superseded by whats-new-2026-05-29b (richer content). Kept disabled so
+    // its seen marker still protects users who dismissed this variant.
     id: "founder-note-2026-05-29",
     version: "v0.7.0-alpha.19",
     title: "A note from the founder",
@@ -83,7 +85,25 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
       "All the love xx",
     ],
     surfaces: ["web", "desktop"],
+    enabled: false,
+  },
+  {
+    id: "whats-new-2026-05-29b",
+    version: "v0.7.0-alpha.19",
+    title: "What's new",
+    body: "A note from the founder: Hush is a solo project and traffic is booming. Thank you for trying it, and please be patient while I work through your reports after my day job.",
+    bullets: [
+      "Invite links opened in a browser now show clear join instructions instead of a confusing server message.",
+      "Hush now tells you when the instance you are on runs an outdated server, so you can ask its admin to update.",
+      "Windows and Linux desktop apps cannot auto-update yet. If the app restarts but stays on the old version, download the latest manually from the releases page.",
+      "Looking for collaborators and active maintainers. Reach out if you are interested. All the love xx",
+    ],
+    surfaces: ["web", "desktop"],
     enabled: true,
+    link: {
+      label: "Download the latest desktop release",
+      href: "https://github.com/hushhq/hush-desktop/releases/latest",
+    },
   },
 ]
 
