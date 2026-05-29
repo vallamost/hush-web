@@ -90,3 +90,21 @@ export function isClientBelowMinimum(
   if (!a || !b) return false;
   return compareVersions(a, b) > 0;
 }
+
+/**
+ * Compare two semver-ish strings, tolerating a leading "v" prefix.
+ *
+ * Returns a negative number when `a` precedes `b`, a positive number when `a`
+ * follows `b`, 0 when equal, and null when either string cannot be parsed.
+ * Build metadata is ignored; prerelease precedence follows SemVer rules.
+ */
+export function compareSemverStrings(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): number | null {
+  if (typeof a !== "string" || typeof b !== "string") return null;
+  const pa = parseVersion(a.replace(/^v/, ""));
+  const pb = parseVersion(b.replace(/^v/, ""));
+  if (!pa || !pb) return null;
+  return compareVersions(pa, pb);
+}
