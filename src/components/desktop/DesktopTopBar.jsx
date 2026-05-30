@@ -2,6 +2,7 @@ import { useBootController } from '../../hooks/useBootController.jsx';
 import { useInstanceContext } from '../../contexts/InstanceContext.jsx';
 import { DesktopOmnibar } from './DesktopOmnibar.jsx';
 import { DesktopTelemetry } from './DesktopTelemetry.jsx';
+import { DesktopWhatsNewButton } from './DesktopWhatsNewButton.jsx';
 
 /**
  * Reads the desktop bridge synchronously. The preload script runs before
@@ -77,7 +78,7 @@ function pickActiveInstanceUrl(mergedGuilds) {
  * so showing them would amount to dead chrome.
  *
  * Skipped entirely on Linux because the native window frame already
- * supplies drag affordance — drawing a second titlebar would create
+ * supplies drag affordance, drawing a second titlebar would create
  * double-chrome.
  *
  * `WebkitAppRegion: 'drag'` is applied inline on the root so the entire
@@ -135,6 +136,7 @@ export function DesktopTopBar() {
 
       <div className="hush-desktop-topbar__cluster hush-desktop-topbar__cluster--center">
         {isAuthenticated && <DesktopOmnibar platform={api.platform} />}
+        {isAuthenticated && <DesktopWhatsNewButton />}
       </div>
 
       <div className="hush-desktop-topbar__cluster hush-desktop-topbar__cluster--right">

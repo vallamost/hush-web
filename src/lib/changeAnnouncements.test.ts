@@ -8,6 +8,7 @@ import {
   isPersistenceAvailable,
   markAnnouncementSeen,
   resolveVisibleAnnouncement,
+  getLatestAnnouncement,
 } from "./changeAnnouncements"
 
 function createMemoryStorage(initial: Record<string, string> = {}): ChangeAnnouncementStorage {
@@ -30,6 +31,35 @@ const baseEntry: ChangeAnnouncementEntry = {
   surfaces: ["web", "desktop"],
   enabled: true,
 }
+
+describe("getLatestAnnouncement", () => {
+  it("returns the newest enabled entry for the surface, ignoring seen state", () => {
+    const entries: ChangeAnnouncementEntry[] = [
+      { ...baseEntry, id: "old", enabled: true },
+      { ...baseEntry, id: "new", enabled: true },
+    ]
+    // No storage / seen involved: manual re-open must surface it regardless.
+    expect(getLatestAnnouncement("web", entries)?.id).toBe("new")
+    expect(getLatestAnnouncement("desktop", entries)?.id).toBe("new")
+  })
+
+  it("skips disabled entries and entries for other surfaces", () => {
+    const entries: ChangeAnnouncementEntry[] = [
+      { ...baseEntry, id: "enabled-web", surfaces: ["web"], enabled: true },
+      { ...baseEntry, id: "disabled", enabled: false },
+      { ...baseEntry, id: "desktop-only", surfaces: ["desktop"], enabled: true },
+    ]
+    expect(getLatestAnnouncement("web", entries)?.id).toBe("enabled-web")
+    expect(getLatestAnnouncement("desktop", entries)?.id).toBe("desktop-only")
+  })
+
+  it("returns null when nothing is enabled for the surface", () => {
+    const entries: ChangeAnnouncementEntry[] = [
+      { ...baseEntry, id: "d", enabled: false },
+    ]
+    expect(getLatestAnnouncement("web", entries)).toBeNull()
+  })
+})
 
 describe("resolveVisibleAnnouncement", () => {
   it("returns null when every entry is disabled", () => {

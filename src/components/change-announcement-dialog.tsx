@@ -2,7 +2,7 @@
  * Small "What's new" dialog rendered after selected updates.
  *
  * Owned by `AuthenticatedApp` and gated by `useChangeAnnouncement`, so
- * this component never decides whether to show itself — it only renders
+ * this component never decides whether to show itself, it only renders
  * the entry it is given and signals dismissal back upstream. Keeping
  * the decision logic out of the view layer is what lets the engine be
  * unit-tested without DOM.
@@ -27,6 +27,37 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import type { ChangeAnnouncementEntry } from "@/lib/changeAnnouncements"
+import { CLIENT_VERSION } from "@/lib/clientVersion"
+import { getDesktopBridge } from "@/lib/desktopBridge"
+
+/**
+ * Version label shown in the dialog: the actual running build, not the
+ * entry's target version. On desktop the version comes from the async
+ * `getAppVersion()` bridge IPC (the preload does not expose a sync field);
+ * web (and desktop before the IPC resolves) uses the bundled client version.
+ */
+function useRunningClientVersion(): string {
+  const [version, setVersion] = React.useState<string>(CLIENT_VERSION)
+
+  React.useEffect(() => {
+    const bridge = getDesktopBridge()
+    if (!bridge || typeof bridge.getAppVersion !== "function") return
+    let cancelled = false
+    bridge
+      .getAppVersion()
+      .then((v) => {
+        if (!cancelled && typeof v === "string" && v.length > 0) setVersion(v)
+      })
+      .catch(() => {
+        /* keep the client-version fallback */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return version
+}
 
 interface ChangeAnnouncementDialogProps {
   readonly entry: ChangeAnnouncementEntry | null
@@ -43,6 +74,7 @@ export function ChangeAnnouncementDialog({
     },
     [onDismiss]
   )
+  const runningVersion = useRunningClientVersion()
 
   if (!entry) return null
 
@@ -55,7 +87,7 @@ export function ChangeAnnouncementDialog({
         <DialogHeader>
           <DialogTitle id="change-announcement-title">What's new</DialogTitle>
           <DialogDescription className="text-muted-foreground text-xs">
-            {entry.version}
+            {runningVersion}
           </DialogDescription>
         </DialogHeader>
 

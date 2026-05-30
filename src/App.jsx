@@ -14,6 +14,8 @@ import { buildGuildRouteRef } from './lib/slugify';
 import { Toaster } from './components/ui/sonner';
 import { UpdateRequiredDialog } from './components/UpdateRequiredDialog';
 import { StaleServerBanner } from './components/StaleServerBanner';
+import { StaleServerDesktopDialog } from './components/desktop/StaleServerDesktopDialog';
+import { DesktopManualUpdatePrompt } from './components/desktop/DesktopManualUpdatePrompt';
 
 const UnauthenticatedShell = lazy(() =>
   import('./components/auth/unauthenticated-shell').then((m) => ({
@@ -323,6 +325,8 @@ export default function App() {
             <DesktopWindowFloorSync />
             <AppBackground />
             <StaleServerBanner />
+            <StaleServerDesktopDialog />
+            <DesktopManualUpdatePrompt />
             <DesktopShell>
               <AppContent />
             </DesktopShell>

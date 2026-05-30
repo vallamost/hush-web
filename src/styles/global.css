@@ -85,7 +85,7 @@ html[data-desktop] .min-h-svh {
    already provides that gap (its height absorbs the same 8px), so
    keeping the inset margin would push the channel column visibly
    lower than the rail / channel sidebar.
-   Zero the top margin on desktop only — browser builds keep the
+   Zero the top margin on desktop only, browser builds keep the
    original floating-panel look. */
 html[data-desktop] [data-slot="sidebar-inset"] {
     margin-top: 0 !important;
@@ -127,7 +127,7 @@ html[data-theme-transition="on"] * {
 
 /* ── Native window material (desktop only) ───────────────────────────────
    Electron sets a conservative default material per platform (macOS
-   vibrancy, Win11 backgroundMaterial — see
+   vibrancy, Win11 backgroundMaterial, see
    `hush-desktop/src/main/window-config.ts`) and the user can pick a
    different supported material at runtime via the appearance settings.
    For the material to be visible the renderer must not paint an opaque
@@ -234,6 +234,9 @@ html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     z-index: 1;
     justify-content: center;
     pointer-events: none;
+    /* Match the telemetry cluster's intra-pill spacing (E2EE <-> ms) so the
+       omnibar and the What's new icon sit at the same rhythm. */
+    gap: 6px;
 }
 
 .hush-desktop-topbar__cluster--right {
@@ -336,6 +339,76 @@ html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     font-variant-numeric: tabular-nums;
     min-width: 4ch;
     text-align: right;
+}
+
+/* What's new re-open affordance, beside the omnibar. */
+.hush-desktop-whatsnew {
+    -webkit-app-region: no-drag;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background-color: color-mix(in oklch, var(--background) 70%, transparent);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted-foreground);
+    cursor: pointer;
+    transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.hush-desktop-whatsnew:hover,
+.hush-desktop-whatsnew:focus-visible {
+    border-color: color-mix(in oklch, var(--ring) 60%, var(--border));
+    background-color: color-mix(in oklch, var(--background) 90%, transparent);
+    color: var(--foreground);
+    outline: none;
+}
+
+.hush-desktop-whatsnew__icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* Persistent stale-server warning: solid amber triangle in the telemetry
+   cluster. Neutral pill so the filled triangle reads with contrast. */
+.hush-desktop-stale-indicator {
+    -webkit-app-region: no-drag;
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border-radius: 6px;
+    background-color: color-mix(in oklch, var(--background) 70%, transparent);
+    border: 1px solid var(--border);
+    color: oklch(0.78 0.16 60);
+    cursor: pointer;
+    transition: border-color 120ms ease, background-color 120ms ease;
+}
+
+.hush-desktop-stale-indicator:hover,
+.hush-desktop-stale-indicator:focus-visible {
+    border-color: color-mix(in oklch, oklch(0.78 0.16 60) 55%, var(--border));
+    background-color: color-mix(in oklch, oklch(0.78 0.16 60) 14%, transparent);
+    outline: none;
+}
+
+.hush-desktop-stale-indicator__icon {
+    width: 14px;
+    height: 14px;
+}
+
+/* The triangle body is filled (fill="currentColor"); knock the exclamation
+   mark out to the pill background so it stays legible on the solid fill.
+   lucide AlertTriangle renders the triangle as the first path, then the
+   vertical line and dot. */
+.hush-desktop-stale-indicator__icon path:nth-child(n + 2) {
+    stroke: var(--background);
 }
 
 /* Belt-and-braces: any interactive descendant of the topbar must opt out

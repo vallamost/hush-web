@@ -1,10 +1,10 @@
 /**
- * AuthenticatedApp — post-login application shell.
+ * AuthenticatedApp, post-login application shell.
  *
  * Composes ServerRail (servers), ChannelSidebar (channel list with DnD),
  * ChannelView (header + content) and the surrounding dialogs (settings,
  * cheat sheet, command palette). Mounts the legacy Chat.jsx as the message
- * body slot of ChannelView for text channels — that file owns Signal/MLS
+ * body slot of ChannelView for text channels, that file owns Signal/MLS
  * encryption, WebSocket subscription, and optimistic sends; this shell
  * never recreates that logic.
  *
@@ -121,6 +121,7 @@ import {
 import { shouldLeaveVoiceAfterSelfRemoval } from "./authenticated-app-self-removal"
 import { ChangeAnnouncementDialog } from "@/components/change-announcement-dialog"
 import { useChangeAnnouncement } from "@/hooks/useChangeAnnouncement"
+import { useWhatsNewReopen } from "@/hooks/useWhatsNewReopen"
 
 const noopRefetch = async () => {}
 
@@ -273,6 +274,7 @@ export function AuthenticatedApp() {
   const changeAnnouncement = useChangeAnnouncement({
     isReady: isAuthenticatedUser && isShellIdle,
   })
+  const whatsNewReopen = useWhatsNewReopen()
   const {
     getTokenForInstance,
     getWsClient,
@@ -308,7 +310,7 @@ export function AuthenticatedApp() {
   }
   const isMobile = useIsMobile()
 
-  // Auth (home) instance — where the JWT lives and the device list is
+  // Auth (home) instance, where the JWT lives and the device list is
   // hosted. Distinct from the currently-selected server, which may be a
   // federated peer. Falls back to the page origin during the first paint
   // before useInstances hydrates. Both sides of the lookup are
@@ -449,7 +451,7 @@ export function AuthenticatedApp() {
   const handleInstanceBanned = React.useCallback(
     (bannedInstanceUrl: string) => {
       // Server-side ban from one instance must NOT trigger
-      // performLogout — that would scorched-earth the entire local
+      // performLogout, that would scorched-earth the entire local
       // profile (auth + vault + transcript + MLS + caches) and drop
       // unrelated authenticated instance sessions. Disconnect only
       // the offending instance; if it was active, defer-navigate so
@@ -560,14 +562,14 @@ export function AuthenticatedApp() {
       // is idempotent (filter is a no-op when the id is already gone).
       // Recursive category deletes return every cascaded channel id;
       // single-channel deletes return just the requested id (or
-      // nothing — the call site falls back to the requested id).
+      // nothing, the call site falls back to the requested id).
       const ids =
         Array.isArray(deleted?.deletedChannelIds) &&
         deleted!.deletedChannelIds!.length > 0
           ? deleted!.deletedChannelIds!
           : [channelId]
       applyChannelsDeleted(ids)
-      // Drop any stale reference to the deleted channel(s) locally —
+      // Drop any stale reference to the deleted channel(s) locally -
       // the active voice session and the chat surface must not stay
       // mounted on a dead id.
       const idSet = new Set(ids)
@@ -622,7 +624,7 @@ export function AuthenticatedApp() {
         await deleteGuild(tk, server.id, server.raw.instanceUrl)
         // Navigate away immediately so the confirmation dialog can
         // close and the user is no longer mounted on the dead server.
-        // Refresh the guild list in the background — awaiting it kept
+        // Refresh the guild list in the background, awaiting it kept
         // the dialog open through a heavy authenticated-app re-render
         // and made the UI feel frozen.
         if (serverTargetsMatch(activeServerTarget, target)) navigate("/home")
@@ -867,7 +869,7 @@ export function AuthenticatedApp() {
     [activeChannel, systemChannelRows]
   )
 
-  // Voice state — populated by <VoiceChannelView /> via onVoiceStateChange.
+  // Voice state, populated by <VoiceChannelView /> via onVoiceStateChange.
   // joinedVoice holds the active voice channel descriptor; mount/unmount of
   // <VoiceChannelView /> drives connect/disconnect.
   const [joinedVoice, setJoinedVoice] = React.useState<JoinedVoice | null>(null)
@@ -1031,8 +1033,8 @@ export function AuthenticatedApp() {
   }, [activeServer, params.channelSlug, channels, systemChannelRows, navigateToServer])
 
   // Auto-join LiveKit when the URL points at a voice channel. The user
-  // expectation is that opening a voice channel — by sidebar click, deep
-  // link, refresh, or rail navigation — joins the room immediately, the
+  // expectation is that opening a voice channel, by sidebar click, deep
+  // link, refresh, or rail navigation, joins the room immediately, the
   // same way legacy hush-web behaved. No prejoin step. handleSelectChannel
   // already sets joinedVoice on click; this effect covers the deep-link /
   // refresh path where the sidebar handler never fired.
@@ -1051,7 +1053,7 @@ export function AuthenticatedApp() {
   }, [activeServer, activeChannel, instanceUrl, joinedVoice, voluntarilyLeftChannelId])
 
   // Clear the voluntary-leave guard whenever the user moves off the
-  // voice channel route — next time they come back it should auto-join.
+  // voice channel route, next time they come back it should auto-join.
   React.useEffect(() => {
     if (activeChannel.kind !== "voice") {
       if (voluntarilyLeftChannelId) setVoluntarilyLeftChannelId(null)
@@ -1148,7 +1150,7 @@ export function AuthenticatedApp() {
   // the sidebar surfaces the live presence stack the mockup
   // demonstrates. Two sources merged:
   // - WS-driven `voicePresence` (other users via voice_state_update)
-  // - local `joinedVoice` (self) — guarantees the user always sees
+  // - local `joinedVoice` (self), guarantees the user always sees
   //   their own avatar the moment they connect, without waiting for
   //   the LiveKit webhook round-trip.
   const channelsWithVoicePresence = React.useMemo<Channel[]>(() => {
@@ -1424,7 +1426,7 @@ export function AuthenticatedApp() {
   const isCatchUp = isHomeSurface && params.channelSlug === "catch-up"
   const isFavoritesSurface = isHomeSurface && params.channelSlug === "favorites"
 
-  // System channels are server-side audit/log feeds — never mount the MLS
+  // System channels are server-side audit/log feeds, never mount the MLS
   // chat over them. SystemChannelView handles their dedicated render.
   const isSystemChannel = activeChannel.kind === "system"
   const chatBody =
@@ -1856,7 +1858,7 @@ export function AuthenticatedApp() {
         // Resolve the target by BOTH id and instanceUrl. If the
         // target no longer exists in `servers` (e.g. instance
         // disconnected after the dialog opened), we must NOT expose
-        // owner-only destructive actions — a bare-id fallback could
+        // owner-only destructive actions, a bare-id fallback could
         // act on a foreign instance with a colliding id.
         const targetServer = resolveServerForAction(servers, settingsTarget)
         const targetRole = settingsTarget
@@ -1907,6 +1909,12 @@ export function AuthenticatedApp() {
       <ChangeAnnouncementDialog
         entry={changeAnnouncement.entry}
         onDismiss={changeAnnouncement.dismiss}
+      />
+      {/* Manual re-open path: shows the latest note again without affecting
+          the auto-show seen state. Only one dialog is open at a time. */}
+      <ChangeAnnouncementDialog
+        entry={whatsNewReopen.entry}
+        onDismiss={whatsNewReopen.close}
       />
     </TooltipProvider>
   )
