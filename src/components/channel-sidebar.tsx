@@ -1,4 +1,5 @@
 import * as React from "react"
+import { createPortal } from "react-dom"
 import {
   ArrowUpRightIcon,
   ChevronDownIcon,
@@ -1092,6 +1093,11 @@ function ChannelsSection({
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
+      {/* Portal the overlay to <body> so its position:fixed resolves against
+          the viewport. On desktop the shell content sets transform:
+          translateZ(0), which would otherwise make the fixed overlay offset
+          from the cursor by the shell/topbar origin. */}
+      {createPortal(
       <DragOverlay>
         {draggedChannel ? (
           // Self-contained, fixed-height, opaque preview. Reusing the real
@@ -1112,7 +1118,9 @@ function ChannelsSection({
             {draggedCategory.name}
           </div>
         ) : null}
-      </DragOverlay>
+      </DragOverlay>,
+        document.body
+      )}
       <Dialog
         open={createOpen !== null}
         onOpenChange={(open) => {
