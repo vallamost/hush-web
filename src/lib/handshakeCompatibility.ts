@@ -3,9 +3,13 @@
 // Called after every `getHandshake` (boot + per-instance reconnect). Inspects
 // the handshake payload for two breaking conditions:
 //
-//   1. The server's `min_client_version` is newer than this client's
-//      semantic version. The client should not attempt any further protocol
-//      work; an Update Required dialog is raised.
+//   1. The server's minimum compatible client version is newer than this
+//      client's semantic version. The client should not attempt any further
+//      protocol work; an Update Required dialog is raised. The server now
+//      publishes this as the canonical `min_compatible_client_version`; the
+//      older `min_client_version` is read as a fallback so the client keeps
+//      working against servers that predate the rename (and after the server
+//      eventually drops the legacy field).
 //
 //   2. The server advertises a `current_mls_ciphersuite` that does not match
 //      the client's `CURRENT_MLS_CIPHERSUITE`. Continuing would risk MLS
@@ -57,6 +61,10 @@ export function isHandshakeCompatibilityError(
 }
 
 interface HandshakeShape {
+  // Canonical minimum compatible client version (preferred). The server
+  // mirrors it onto the legacy `min_client_version` field during the
+  // transition; read the canonical one first and fall back to the legacy.
+  min_compatible_client_version?: string | null;
   min_client_version?: string | null;
   current_mls_ciphersuite?: number | null;
 }
@@ -69,7 +77,7 @@ interface HandshakeShape {
  *
  * Tolerant of:
  *   - Missing fields (pre-X-Wing server, older deployment): no event.
- *   - Unparseable `min_client_version`: no event.
+ *   - Unparseable minimum version: no event.
  * Failing closed on these would lock users out of older instances during
  * staged rollouts.
  */
@@ -78,11 +86,15 @@ export function evaluateHandshakeCompatibility(
 ): HandshakeCompatibilityReason | null {
   if (!handshake) return null;
 
-  if (isClientBelowMinimum(handshake.min_client_version)) {
+  // Prefer the canonical field; fall back to the legacy one so the gate works
+  // against servers on either side of the rename.
+  const minClientVersion =
+    handshake.min_compatible_client_version ?? handshake.min_client_version;
+  if (isClientBelowMinimum(minClientVersion)) {
     requestUpdate({
       reason: "min-client-version",
       context: {
-        required: handshake.min_client_version,
+        required: minClientVersion,
         running: CLIENT_VERSION,
       },
     });
@@ -129,7 +141,8 @@ function hostFromInstanceUrl(instanceUrl: string): string | null {
  * MUST be called before any auth/WS work for an instance.
  *
  * @throws {HandshakeCompatibilityError} when the handshake reports an
- *   incompatible `min_client_version` or `current_mls_ciphersuite`.
+ *   incompatible minimum client version (`min_compatible_client_version`,
+ *   or the legacy `min_client_version`) or `current_mls_ciphersuite`.
  */
 export async function assertHandshakeCompatible(
   instanceUrl: string,
