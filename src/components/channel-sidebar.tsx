@@ -1105,7 +1105,7 @@ function ChannelsSection({
           // (DragOverlay portals to <body>), where its context-driven sizing
           // is absent and the row looks oversized. This mirrors the real row
           // metrics (h-8, gap-2, icon size-4) without that dependency.
-          <div className="flex h-8 w-full items-center gap-2 rounded-md bg-popover px-2 text-sm text-foreground shadow-lg">
+          <div className="flex h-8 w-full cursor-grabbing items-center gap-2 rounded-md bg-popover px-2 text-sm text-foreground shadow-lg select-none">
             {draggedChannel.kind === "voice" ? (
               <Volume2Icon className="size-4 shrink-0" />
             ) : (
@@ -1114,7 +1114,7 @@ function ChannelsSection({
             <span className="truncate">{draggedChannel.name}</span>
           </div>
         ) : draggedCategory ? (
-          <div className="flex h-8 items-center rounded-md bg-popover px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-lg">
+          <div className="flex h-8 cursor-grabbing items-center rounded-md bg-popover px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-lg select-none">
             {draggedCategory.name}
           </div>
         ) : null}
