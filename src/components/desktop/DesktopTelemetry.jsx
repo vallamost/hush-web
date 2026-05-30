@@ -1,6 +1,7 @@
 import { LockIcon, WifiIcon, WifiOffIcon } from 'lucide-react';
 import { useInstancePing } from './useInstancePing.js';
 import { formatPingLabel, PING_STATUS } from './pingStatus.js';
+import { StaleServerIndicator } from './StaleServerIndicator.jsx';
 
 /**
  * Maps a ping bucket to the existing semantic colour tokens so the badge
@@ -19,8 +20,8 @@ const PING_COLOR_VAR = Object.freeze({
  * the active instance.
  *
  * Truth sources only:
- *   - The E2EE indicator reflects a fixed property of Hush — every
- *     real connection is E2EE — so it stays static. No telemetry is
+ *   - The E2EE indicator reflects a fixed property of Hush: every
+ *     real connection is E2EE, so it stays static. No telemetry is
  *     fabricated to imply per-message verification.
  *   - The ping number is measured against `${instanceUrl}/api/health` by
  *     `useInstancePing`. When no instance is active the readout shows
@@ -58,6 +59,7 @@ export function DesktopTelemetry({ instanceUrl }) {
         <WifiGlyph className="hush-desktop-telemetry__glyph" aria-hidden />
         <span className="hush-desktop-telemetry__ping">{label}</span>
       </span>
+      <StaleServerIndicator />
     </div>
   );
 }

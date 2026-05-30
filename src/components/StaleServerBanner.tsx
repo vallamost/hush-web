@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { useStaleServer } from "@/hooks/useStaleServer";
+import { getDesktopBridge } from "@/lib/desktopBridge";
 
 /**
  * Global, dismissible banner shown when the connected instance runs a Hush
@@ -13,6 +14,10 @@ import { useStaleServer } from "@/hooks/useStaleServer";
  */
 export function StaleServerBanner() {
   const { detail, dismiss } = useStaleServer();
+  // Desktop uses a dialog + persistent titlebar triangle instead, so the
+  // notice never meshes with the custom titlebar drag region. See
+  // StaleServerDesktopDialog / StaleServerIndicator.
+  if (getDesktopBridge()) return null;
   if (!detail) return null;
 
   const instance = detail.instanceHost ? ` (${detail.instanceHost})` : "";
