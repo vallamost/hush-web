@@ -370,8 +370,8 @@ export function ChannelSidebar({
           ) : null}
           {/* Render ChannelsSection only when this sidebar belongs to a
               real server (serverMenuEnabled=true). The Home sidebar has
-              no channel surface — its content is the DM peer list above
-              — so the empty "Channels" group reads as a stray heading.
+              no channel surface, its content is the DM peer list above
+             , so the empty "Channels" group reads as a stray heading.
               On server views the section always renders so right-click
               creation + orphan-channel recovery still work even when
               both lists are empty. */}
@@ -572,7 +572,7 @@ function ServerHeader({
                 </span>
               </DropdownMenuItem>
               {/* Separator between the rail-mirror actions
-                  (Add / Discover) and whatever comes next — Server
+                  (Add / Discover) and whatever comes next, Server
                   group on a real server, Early Bird + Info section
                   on Home. Render unconditionally so Home gets the
                   same visual break. */}
@@ -915,7 +915,7 @@ function ChannelsSection({
     for (const cat of categories) map.set(cat.id, [])
     for (const ch of channels) {
       // Orphan channels (parentId set but the category isn't visible to us
-      // — e.g. backend race, permission filter, or a missing template
+      //, e.g. backend race, permission filter, or a missing template
       // category) fold into root so they remain reachable. Otherwise they
       // would only show in the command palette and never in the sidebar.
       const key =
@@ -1094,14 +1094,21 @@ function ChannelsSection({
       </ContextMenu>
       <DragOverlay>
         {draggedChannel ? (
-          <ChannelButton
-            channel={draggedChannel}
-            isActive={false}
-            onSelect={() => {}}
-            isDragging
-          />
+          // Self-contained, fixed-height, opaque preview. Reusing the real
+          // SidebarMenuButton here renders it outside the SidebarProvider
+          // (DragOverlay portals to <body>), where its context-driven sizing
+          // is absent and the row looks oversized. This mirrors the real row
+          // metrics (h-8, gap-2, icon size-4) without that dependency.
+          <div className="flex h-8 w-full items-center gap-2 rounded-md bg-popover px-2 text-sm text-foreground shadow-lg">
+            {draggedChannel.kind === "voice" ? (
+              <Volume2Icon className="size-4 shrink-0" />
+            ) : (
+              <HashIcon className="size-4 shrink-0" />
+            )}
+            <span className="truncate">{draggedChannel.name}</span>
+          </div>
         ) : draggedCategory ? (
-          <div className="rounded-md bg-card px-2 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-lg">
+          <div className="flex h-8 items-center rounded-md bg-popover px-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground shadow-lg">
             {draggedCategory.name}
           </div>
         ) : null}
@@ -1292,7 +1299,7 @@ function SortableCategory({
     if (!onDeleteCategory) return
     // Close the dialog BEFORE awaiting the mutation. The mutation
     // triggers a `channel_deleted` WS broadcast that drops this
-    // category from the list — which unmounts SortableCategory while
+    // category from the list, which unmounts SortableCategory while
     // the AlertDialog is still mid-close. That race leaves Radix's
     // body `pointer-events: none` lock in place and freezes every
     // future click until a hard reload.
@@ -1347,7 +1354,7 @@ function SortableCategory({
               variant="destructive"
               disabled={!canDeleteCategory}
               onSelect={() => {
-                // Defer dialog open to the next tick — opening
+                // Defer dialog open to the next tick, opening
                 // synchronously while ContextMenu is still tearing
                 // down stacks two Radix overlays and leaves `<body>`
                 // with `pointer-events: none` once both close.
@@ -1511,7 +1518,7 @@ function ChannelButton({
     if (!onDeleteChannel) return
     // Close the dialog BEFORE awaiting the mutation. The mutation
     // triggers a `channel_deleted` WS broadcast that drops this
-    // channel from the list — which unmounts SortableChannel while
+    // channel from the list, which unmounts SortableChannel while
     // the AlertDialog is still mid-close. That race leaves Radix's
     // body `pointer-events: none` lock in place and freezes every
     // future click until a hard reload.
@@ -1559,7 +1566,7 @@ function ChannelButton({
             variant="destructive"
             disabled={!canDelete}
             onSelect={() => {
-              // Defer dialog open to the next tick — opening
+              // Defer dialog open to the next tick, opening
               // synchronously while ContextMenu is still tearing
               // down stacks two Radix overlays and leaves `<body>`
               // with `pointer-events: none` once both close.
