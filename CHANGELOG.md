@@ -17,8 +17,8 @@ recorded here. Format is loosely based on Keep a Changelog. Dates are ISO
 - "What's new" note surfaced after updates, including a founder message.
 
 ### Known issues
-- Windows and Linux desktop builds are not yet code-signed, so the in-app
-  auto-update cannot complete: the app may restart but stay on the old
-  version. Until signing lands, update those platforms manually by
-  downloading the latest installer from the releases page. macOS is signed
-  and notarized and auto-updates normally.
+- The Windows desktop build is not yet code-signed, so the in-app auto-update
+  cannot complete: the app may restart but stay on the old version. Until
+  Windows signing lands, update Windows manually by downloading the latest
+  installer from the releases page. macOS (signed and notarized) and Linux
+  AppImage auto-update normally; Linux deb updates via your package manager.

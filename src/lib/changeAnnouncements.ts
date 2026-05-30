@@ -95,7 +95,7 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
     bullets: [
       "Invite links opened in a browser now show clear join instructions instead of a confusing server message.",
       "Hush now tells you when the instance you are on runs an outdated server, so you can ask its admin to update.",
-      "Windows and Linux desktop apps cannot auto-update yet. If the app restarts but stays on the old version, download the latest manually from the releases page.",
+      "The Windows desktop app cannot auto-update yet. If it asks to restart but stays on the old version, download the latest manually from the releases page.",
       "Looking for collaborators and active maintainers. Reach out if you are interested. All the love xx",
     ],
     surfaces: ["web", "desktop"],
