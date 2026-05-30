@@ -234,6 +234,9 @@ html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     z-index: 1;
     justify-content: center;
     pointer-events: none;
+    /* Match the telemetry cluster's intra-pill spacing (E2EE <-> ms) so the
+       omnibar and the What's new icon sit at the same rhythm. */
+    gap: 6px;
 }
 
 .hush-desktop-topbar__cluster--right {
@@ -347,7 +350,6 @@ html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     justify-content: center;
     width: 28px;
     height: 28px;
-    margin-left: 6px;
     padding: 0;
     background-color: color-mix(in oklch, var(--background) 70%, transparent);
     border: 1px solid var(--border);
@@ -370,7 +372,8 @@ html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     height: 14px;
 }
 
-/* Collapsed stale-server warning: triangle in the telemetry cluster. */
+/* Persistent stale-server warning: solid amber triangle in the telemetry
+   cluster. Neutral pill so the filled triangle reads with contrast. */
 .hush-desktop-stale-indicator {
     -webkit-app-region: no-drag;
     appearance: none;
@@ -381,22 +384,31 @@ html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     height: 22px;
     padding: 0;
     border-radius: 6px;
-    background: color-mix(in oklch, oklch(0.78 0.16 60) 16%, transparent);
-    border: 1px solid color-mix(in oklch, oklch(0.78 0.16 60) 45%, transparent);
+    background-color: color-mix(in oklch, var(--background) 70%, transparent);
+    border: 1px solid var(--border);
     color: oklch(0.78 0.16 60);
     cursor: pointer;
-    transition: background-color 120ms ease;
+    transition: border-color 120ms ease, background-color 120ms ease;
 }
 
 .hush-desktop-stale-indicator:hover,
 .hush-desktop-stale-indicator:focus-visible {
-    background: color-mix(in oklch, oklch(0.78 0.16 60) 28%, transparent);
+    border-color: color-mix(in oklch, oklch(0.78 0.16 60) 55%, var(--border));
+    background-color: color-mix(in oklch, oklch(0.78 0.16 60) 14%, transparent);
     outline: none;
 }
 
 .hush-desktop-stale-indicator__icon {
-    width: 13px;
-    height: 13px;
+    width: 14px;
+    height: 14px;
+}
+
+/* The triangle body is filled (fill="currentColor"); knock the exclamation
+   mark out to the pill background so it stays legible on the solid fill.
+   lucide AlertTriangle renders the triangle as the first path, then the
+   vertical line and dot. */
+.hush-desktop-stale-indicator__icon path:nth-child(n + 2) {
+    stroke: var(--background);
 }
 
 /* Belt-and-braces: any interactive descendant of the topbar must opt out

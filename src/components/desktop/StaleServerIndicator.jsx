@@ -4,15 +4,15 @@ import { useStaleServerDesktop } from '@/hooks/useStaleServerDesktop';
 import { reopenStaleServerDesktop } from '@/lib/staleServerDesktopStore';
 
 /**
- * Persistent stale-server warning triangle, shown in the desktop telemetry
- * cluster (beside E2EE / latency) once the user dismisses the dialog. Clicking
- * re-opens the notice. Renders nothing until the dialog has been collapsed, so
- * it never duplicates the dialog. `no-drag` so the click is not swallowed by
- * the titlebar drag region.
+ * Persistent stale-server warning triangle in the desktop telemetry cluster
+ * (beside E2EE / latency). Stays visible the whole time the instance is stale,
+ * including while the dialog is open, so the warning never disappears under
+ * the user. Clicking re-opens the notice. `no-drag` so the click is not
+ * swallowed by the titlebar drag region.
  */
 export function StaleServerIndicator() {
-  const { detail, collapsed } = useStaleServerDesktop();
-  if (!detail || !collapsed) return null;
+  const { detail } = useStaleServerDesktop();
+  if (!detail) return null;
 
   return (
     <button
@@ -23,7 +23,11 @@ export function StaleServerIndicator() {
       title="This instance runs an outdated server. Click to read the warning."
       style={{ WebkitAppRegion: 'no-drag' }}
     >
-      <AlertTriangleIcon className="hush-desktop-stale-indicator__icon" aria-hidden />
+      <AlertTriangleIcon
+        className="hush-desktop-stale-indicator__icon"
+        fill="currentColor"
+        aria-hidden
+      />
     </button>
   );
 }

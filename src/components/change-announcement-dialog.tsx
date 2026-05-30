@@ -2,7 +2,7 @@
  * Small "What's new" dialog rendered after selected updates.
  *
  * Owned by `AuthenticatedApp` and gated by `useChangeAnnouncement`, so
- * this component never decides whether to show itself — it only renders
+ * this component never decides whether to show itself, it only renders
  * the entry it is given and signals dismissal back upstream. Keeping
  * the decision logic out of the view layer is what lets the engine be
  * unit-tested without DOM.
@@ -27,6 +27,17 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import type { ChangeAnnouncementEntry } from "@/lib/changeAnnouncements"
+import { CLIENT_VERSION } from "@/lib/clientVersion"
+import { getDesktopBridge } from "@/lib/desktopBridge"
+
+/**
+ * Version label shown in the dialog: the actual running build, not the
+ * entry's target version. Desktop reports its own app version via the bridge;
+ * web falls back to the bundled client version.
+ */
+function runningClientVersion(): string {
+  return getDesktopBridge()?.appVersion ?? CLIENT_VERSION
+}
 
 interface ChangeAnnouncementDialogProps {
   readonly entry: ChangeAnnouncementEntry | null
@@ -55,7 +66,7 @@ export function ChangeAnnouncementDialog({
         <DialogHeader>
           <DialogTitle id="change-announcement-title">What's new</DialogTitle>
           <DialogDescription className="text-muted-foreground text-xs">
-            {entry.version}
+            {runningClientVersion()}
           </DialogDescription>
         </DialogHeader>
 
