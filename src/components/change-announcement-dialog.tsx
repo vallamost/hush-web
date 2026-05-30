@@ -32,11 +32,31 @@ import { getDesktopBridge } from "@/lib/desktopBridge"
 
 /**
  * Version label shown in the dialog: the actual running build, not the
- * entry's target version. Desktop reports its own app version via the bridge;
- * web falls back to the bundled client version.
+ * entry's target version. On desktop the version comes from the async
+ * `getAppVersion()` bridge IPC (the preload does not expose a sync field);
+ * web (and desktop before the IPC resolves) uses the bundled client version.
  */
-function runningClientVersion(): string {
-  return getDesktopBridge()?.appVersion ?? CLIENT_VERSION
+function useRunningClientVersion(): string {
+  const [version, setVersion] = React.useState<string>(CLIENT_VERSION)
+
+  React.useEffect(() => {
+    const bridge = getDesktopBridge()
+    if (!bridge || typeof bridge.getAppVersion !== "function") return
+    let cancelled = false
+    bridge
+      .getAppVersion()
+      .then((v) => {
+        if (!cancelled && typeof v === "string" && v.length > 0) setVersion(v)
+      })
+      .catch(() => {
+        /* keep the client-version fallback */
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  return version
 }
 
 interface ChangeAnnouncementDialogProps {
@@ -54,6 +74,7 @@ export function ChangeAnnouncementDialog({
     },
     [onDismiss]
   )
+  const runningVersion = useRunningClientVersion()
 
   if (!entry) return null
 
@@ -66,7 +87,7 @@ export function ChangeAnnouncementDialog({
         <DialogHeader>
           <DialogTitle id="change-announcement-title">What's new</DialogTitle>
           <DialogDescription className="text-muted-foreground text-xs">
-            {runningClientVersion()}
+            {runningVersion}
           </DialogDescription>
         </DialogHeader>
 
