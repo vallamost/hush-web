@@ -47,6 +47,13 @@ export interface ChangeAnnouncementEntry {
 export const SEEN_STORAGE_KEY = "hush.changeAnnouncements.seen"
 
 /**
+ * Window event asking the app shell to re-open the latest "What's new" note,
+ * even if it was already dismissed. Dispatched by the persistent What's new
+ * affordance in the desktop topbar; handled where the dialog is owned.
+ */
+export const OPEN_WHATS_NEW_EVENT = "hush:open-whats-new"
+
+/**
  * Authored list of announcements.
  *
  * Ordering is significant: the resolver picks the last matching entry,
@@ -241,6 +248,27 @@ export function resolveVisibleAnnouncement(
     if (!entry.enabled) continue
     if (!entry.surfaces.includes(surface)) continue
     if (seen.has(entry.id)) continue
+    return entry
+  }
+  return null
+}
+
+/**
+ * Returns the newest enabled entry for `surface`, ignoring the seen set.
+ *
+ * Used by the manual "What's new" re-open affordance: the auto-resolver only
+ * surfaces unseen entries, but a user clicking the persistent icon expects to
+ * re-read the latest note even after dismissing it. Returns null when no
+ * enabled entry targets the surface.
+ */
+export function getLatestAnnouncement(
+  surface: ChangeAnnouncementSurface,
+  entries: readonly ChangeAnnouncementEntry[] = CHANGE_ANNOUNCEMENTS
+): ChangeAnnouncementEntry | null {
+  for (let index = entries.length - 1; index >= 0; index -= 1) {
+    const entry = entries[index]
+    if (!entry.enabled) continue
+    if (!entry.surfaces.includes(surface)) continue
     return entry
   }
   return null
