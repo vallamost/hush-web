@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * MLS group lifecycle manager.
  *
@@ -12,6 +13,49 @@
  * deps shape:
  *   { db: IDBDatabase, credential: { signingPrivateKey, signingPublicKey, credentialBytes },
  *     token: string, mlsStore, hushCrypto, api, wsClient? }
+ */
+
+/**
+ * @typedef {object} MlsCredential
+ * @property {Uint8Array} signingPrivateKey
+ * @property {Uint8Array} signingPublicKey
+ * @property {Uint8Array} credentialBytes
+ */
+
+/**
+ * The subset of the instance API surface that MLS group operations call.
+ * Narrow on purpose (interface segregation): naming any method here that does
+ * not exist on the bound api object is a compile-time error at the call site.
+ * Signatures are intentionally loose for this first typing pass; tightening
+ * arity is tracked under the instanceApi typedef work.
+ *
+ * @typedef {object} MlsInstanceApi
+ * @property {(...args: any[]) => Promise<any>} getMLSGroupInfo
+ * @property {(...args: any[]) => Promise<any>} putMLSGroupInfo
+ * @property {(...args: any[]) => Promise<any>} postMLSCommit
+ * @property {(...args: any[]) => Promise<any>} getMLSCommitsSinceEpoch
+ * @property {(...args: any[]) => Promise<any>} getGuildMetadataGroupInfo
+ * @property {(...args: any[]) => Promise<any>} putGuildMetadataGroupInfo
+ * @property {(...args: any[]) => Promise<any>} getMLSVoiceGroupInfo
+ * @property {(...args: any[]) => Promise<any>} putMLSVoiceGroupInfo
+ * @property {(...args: any[]) => Promise<any>} postMLSVoiceCommit
+ */
+
+/**
+ * Injected dependencies for MLS group operations. Each facade is the real
+ * module/object passed at the call sites in useMLS.js / useRoom.js, so a typo in
+ * a binding name (e.g. exportGroupInfo vs exportGroupInfoBytes) surfaces as a
+ * compile-time error instead of a runtime crash. See HUSHHQ-97 / HUSHHQ-102.
+ *
+ * @typedef {object} MlsDeps
+ * @property {IDBDatabase} db
+ * @property {string} token
+ * @property {typeof import('./mlsStore')} mlsStore
+ * @property {typeof import('./hushCrypto')} hushCrypto
+ * @property {MlsInstanceApi} api
+ * @property {MlsCredential | null} [credential]
+ * @property {string} [baseUrl]
+ * @property {{ send: (type: string, payload: any) => void }} [wsClient]
  */
 
 // ---------------------------------------------------------------------------
@@ -63,9 +107,18 @@ function fromBase64(b64) {
 }
 
 /**
+ * Extracts a string message from an unknown thrown value without assuming Error.
+ * @param {unknown} err
+ * @returns {string}
+ */
+function errorText(err) {
+  return String(/** @type {any} */ (err)?.message ?? err);
+}
+
+/**
  * Extracts credential fields from a deps object.
  * Throws if no credential is available.
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @returns {{ sigPriv: Uint8Array, sigPub: Uint8Array, credBytes: Uint8Array }}
  */
 function getCredFields(deps) {
@@ -82,7 +135,7 @@ function getCredFields(deps) {
  * Finalise an External Commit locally so the joining device has usable group
  * state at the committed epoch.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {Uint8Array} groupIdBytes
  * @param {Uint8Array} sigPriv
  * @param {Uint8Array} sigPub
@@ -119,7 +172,7 @@ async function mergeExternalCommit(deps, groupIdBytes, sigPriv, sigPub, credByte
  * @returns {boolean}
  */
 function canRecoverMessageSend(err) {
-  const message = String(err?.message ?? err);
+  const message = errorText(err);
   const lowerMessage = message.toLowerCase();
   // Fail closed on every eviction-shaped error. Checked BEFORE the
   // recoverable match so an upstream wrap like
@@ -139,7 +192,7 @@ function canRecoverMessageSend(err) {
 /**
  * Create an MLS application message for an already-joined channel group.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {Uint8Array} channelIdBytes
  * @param {Uint8Array} sigPriv
  * @param {Uint8Array} sigPub
@@ -170,7 +223,7 @@ async function createChannelMessage(deps, channelIdBytes, sigPriv, sigPub, credB
  * Called when the current user creates the channel (they are the initial member).
  * Stores GroupInfo on the server and records the epoch locally.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<{ groupInfoBytes: Uint8Array, epoch: number }>}
  */
@@ -201,7 +254,7 @@ export async function createChannelGroup(deps, channelId) {
  * Posts the commit to the server so existing members can advance their epoch.
  * Returns silently if no GroupInfo exists on the server (group not yet created).
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<void>}
  */
@@ -244,7 +297,7 @@ export async function joinChannelGroup(deps, channelId) {
  * Used by joinMissingGroups so template channels (created server-side with no MLS
  * group) get their group created by the first member who enters the guild.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<void>}
  */
@@ -264,7 +317,7 @@ export async function joinOrCreateChannelGroup(deps, channelId) {
     try {
       await createChannelGroup(deps, channelId);
     } catch (err) {
-      const msg = String(err?.message ?? err);
+      const msg = errorText(err);
       if (msg.includes('GroupAlreadyExists') || msg.includes('already exists')) {
         // Race: another code path (e.g. ChannelList) already created this group.
         // The epoch may not be stored yet - let the other path finish.
@@ -279,7 +332,7 @@ export async function joinOrCreateChannelGroup(deps, channelId) {
  * Join ALL text channel groups for a guild in sequence.
  * Sequential (not parallel) to avoid KeyPackage exhaustion race conditions.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string[]} channelIds
  * @returns {Promise<void>}
  */
@@ -301,7 +354,7 @@ export async function joinAllChannelGroups(deps, channelIds) {
  * Add a member to the channel group via Welcome (called on mls.add_request).
  * The caller posts the resulting commit to the server.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @param {Uint8Array} keyPackageBytes - KeyPackage from the new member
  * @returns {Promise<{ welcomeBytes: Uint8Array }>}
@@ -341,7 +394,7 @@ export async function addMemberToChannel(deps, channelId, keyPackageBytes) {
 /**
  * Remove a member from the channel group (called when handling mls.add_request with action "remove").
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @param {string} memberIdentity - Identity string of the member to remove
  * @returns {Promise<void>}
@@ -384,7 +437,7 @@ export async function removeMemberFromChannel(deps, channelId, memberIdentity) {
  * Stores plaintext in local cache BEFORE encrypting so self-sent messages
  * can be recovered when the self-echo arrives.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @param {string} plaintext
  * @returns {Promise<{ messageBytes: Uint8Array, localId: string }>}
@@ -417,7 +470,7 @@ export async function encryptMessage(deps, channelId, plaintext) {
 
     console.warn('[mlsGroup] createMessage failed, re-joining channel group', {
       channelId,
-      reason: String(err?.message ?? err),
+      reason: errorText(err),
     });
     await mlsStore.deleteGroupEpoch(db, channelId);
     await joinOrCreateChannelGroup(deps, channelId);
@@ -431,7 +484,7 @@ export async function encryptMessage(deps, channelId, plaintext) {
  * Returns decrypted plaintext for application messages.
  * Returns null plaintext for commits/proposals (state-only messages).
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @param {Uint8Array} messageBytes
  * @returns {Promise<{ plaintext: string|null, senderIdentity?: string, type: string, epoch: number }>}
@@ -472,7 +525,7 @@ export async function decryptMessage(deps, channelId, messageBytes) {
  * Process a received MLS Commit (from mls.commit WS event).
  * Advances the local group epoch and persists the updated state.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @param {Uint8Array} commitBytes
  * @returns {Promise<void>}
@@ -496,7 +549,7 @@ export async function processCommit(deps, channelId, commitBytes) {
  * Fetches commits since the last known epoch and replays them sequentially.
  * If too many commits are missed (>= 1000), re-joins the group from scratch.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<void>}
  */
@@ -536,7 +589,7 @@ export async function catchupCommits(deps, channelId) {
  * Sends the proposal to the server via WS so online members commit the removal.
  * Deletes local group state after sending.
  *
- * @param {object} deps - Must include wsClient
+ * @param {MlsDeps} deps - Must include wsClient
  * @param {string} channelId
  * @returns {Promise<void>}
  */
@@ -567,7 +620,7 @@ export async function leaveChannelGroup(deps, channelId) {
  * Leave ALL channel groups for a guild (used on kick/ban/leave).
  * For kicked/banned members, no proposals are needed - just clean up local state.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string[]} channelIds
  * @returns {Promise<void>}
  */
@@ -590,7 +643,7 @@ export async function leaveAllChannelGroups(deps, channelIds) {
  * Perform a self-update to rotate leaf node key material.
  * Should be called periodically (24h cadence) per CONTEXT.md.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<void>}
  */
@@ -641,7 +694,7 @@ export function guildMetadataIdToBytes(guildId) {
  * Called by the guild creator (the initial single member).
  * Stores GroupInfo on the server for subsequent members to join.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} guildId
  * @returns {Promise<{ groupInfoBytes: Uint8Array, epoch: number }>}
  */
@@ -672,7 +725,7 @@ export async function createGuildMetadataGroup(deps, guildId) {
  * Called by new members when they join a guild.
  * Returns silently if no GroupInfo exists on the server (guild metadata group not yet created).
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} guildId
  * @returns {Promise<void>}
  */
@@ -706,7 +759,7 @@ export async function joinGuildMetadataGroup(deps, guildId) {
  * Export the 32-byte AES-256-GCM metadata key from the guild MLS group.
  * Read-only - does not mutate group state.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} guildId
  * @returns {Promise<{ metadataKeyBytes: Uint8Array, epoch: number }>}
  */
@@ -726,7 +779,7 @@ export async function exportGuildMetadataKey(deps, guildId) {
  * Remove local guild metadata MLS group state (called when leaving a guild).
  * Does NOT send a leave proposal - the server handles epoch cleanup.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} guildId
  * @returns {Promise<void>}
  */
@@ -747,7 +800,7 @@ export async function leaveGuildMetadataGroup(deps, guildId) {
  * Called by the first participant entering a voice channel.
  * Stores GroupInfo on the server for subsequent joiners.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<{ epoch: number }>}
  */
@@ -773,7 +826,7 @@ export async function createVoiceGroup(deps, channelId) {
     groupInfoBytes = result.groupInfoBytes;
     epoch = result.epoch;
   } catch (createErr) {
-    const msg = String(createErr?.message ?? createErr);
+    const msg = errorText(createErr);
     if (!(msg.includes('GroupAlreadyExists') || msg.includes('already exists'))) {
       throw createErr;
     }
@@ -817,7 +870,7 @@ export async function createVoiceGroup(deps, channelId) {
  * Called by subsequent participants entering a voice channel.
  * Posts the commit to the server so existing members can advance their epoch.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<{ epoch: number }>}
  */
@@ -866,7 +919,7 @@ export async function joinVoiceGroup(deps, channelId) {
  * Export a 32-byte voice frame key from the current epoch.
  * Read-only - does not mutate group state.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<{ frameKeyBytes: Uint8Array, epoch: number }>}
  */
@@ -886,7 +939,7 @@ export async function exportVoiceFrameKey(deps, channelId) {
  * Process a received MLS commit for the voice group (from mls.commit WS event with group_type=voice).
  * Advances the local voice group epoch and persists the updated state.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @param {Uint8Array} commitBytes
  * @returns {Promise<{ type: string, epoch: number }>}
@@ -909,7 +962,7 @@ export async function processVoiceCommit(deps, channelId, commitBytes) {
  * Perform a self-update on the voice MLS group to rotate leaf node key material.
  * Should be called on the voice_key_rotation_hours cadence.
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<{ epoch: number }>}
  */
@@ -964,7 +1017,7 @@ export async function performVoiceSelfUpdate(deps, channelId) {
  * guarantee. This function validates the shape before invoking
  * crypto so a malformed input fails closed, not silently.
  *
- * @param {object} deps - Must provide `db`, `token`, `credential`,
+ * @param {MlsDeps} deps - Must provide `db`, `token`, `credential`,
  *   `mlsStore`, `hushCrypto`, and `api` (scoped to the owning
  *   instance — never bare `apiLib`).
  * @param {string} channelId
@@ -1016,7 +1069,7 @@ export async function removeMemberFromVoiceGroup(deps, channelId, memberIdentity
  * Does NOT call a server delete - the server handles cleanup via the LiveKit
  * webhook when the last participant leaves (voice_group_destroyed WS event).
  *
- * @param {object} deps
+ * @param {MlsDeps} deps
  * @param {string} channelId
  * @returns {Promise<void>}
  */
