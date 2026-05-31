@@ -323,7 +323,17 @@ export async function addMemberToChannel(deps, channelId, keyPackageBytes) {
     toBase64(result.groupInfoBytes),
     result.epoch
   );
-  await mlsStore.setGroupEpoch(db, channelId, result.epoch);
+
+  // Merge the pending commit so this member advances to the new epoch before
+  // sending any further messages. The commit listener's self-skip assumes the
+  // originator already advanced its own state; without this merge the originator
+  // stays at the old epoch and its next message is encrypted there, so the
+  // just-added member (who joined at the new epoch via the Welcome) can never
+  // decrypt it. Mirrors performSelfUpdate. HUSHHQ-99.
+  await mlsStore.preloadGroupState(db);
+  const mergeResult = await hushCrypto.mergePendingCommit(channelIdBytes, sigPriv, sigPub, credBytes);
+  await mlsStore.flushStorageCache(db);
+  await mlsStore.setGroupEpoch(db, channelId, mergeResult.epoch);
 
   return { welcomeBytes: result.welcomeBytes };
 }
@@ -353,7 +363,16 @@ export async function removeMemberFromChannel(deps, channelId, memberIdentity) {
     toBase64(result.groupInfoBytes),
     result.epoch
   );
-  await mlsStore.setGroupEpoch(db, channelId, result.epoch);
+
+  // Merge the pending commit so this member advances past the removal before
+  // sending any further messages. Without this the originator stays at the old
+  // epoch where the removed member still holds keys, so its next message could
+  // still be decrypted by the just-removed member. Mirrors performSelfUpdate.
+  // HUSHHQ-99.
+  await mlsStore.preloadGroupState(db);
+  const mergeResult = await hushCrypto.mergePendingCommit(channelIdBytes, sigPriv, sigPub, credBytes);
+  await mlsStore.flushStorageCache(db);
+  await mlsStore.setGroupEpoch(db, channelId, mergeResult.epoch);
 }
 
 // ---------------------------------------------------------------------------

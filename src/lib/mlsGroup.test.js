@@ -356,6 +356,26 @@ describe('addMemberToChannel', () => {
       'MLS addMembers failed',
     );
   });
+
+  // HUSHHQ-99 regression: the originator must merge its own add-commit before
+  // sending any further message. Without it the originator stays at the old
+  // epoch, so the just-added member (who joined at the new epoch via the
+  // Welcome) cannot decrypt the originator's first message.
+  it('merges the pending commit after posting so the originator advances epoch', async () => {
+    const keyPackageBytes = new Uint8Array([1, 2, 3]);
+    await addMemberToChannel(deps, 'ch-3', keyPackageBytes);
+
+    expect(deps.hushCrypto.mergePendingCommit).toHaveBeenCalledWith(
+      new TextEncoder().encode('ch-3'),
+      deps.credential.signingPrivateKey,
+      deps.credential.signingPublicKey,
+      deps.credential.credentialBytes,
+    );
+    // Post happens before merge.
+    const postOrder = deps.api.postMLSCommit.mock.invocationCallOrder[0];
+    const mergeOrder = deps.hushCrypto.mergePendingCommit.mock.invocationCallOrder[0];
+    expect(postOrder).toBeLessThan(mergeOrder);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -388,9 +408,24 @@ describe('removeMemberFromChannel', () => {
     );
   });
 
-  it('updates local group epoch after removing member', async () => {
+  it('updates local group epoch from the merged commit after removing member', async () => {
+    // HUSHHQ-99: setGroupEpoch now reflects the merged epoch (the group state
+    // actually advances), not the bare removeMembers-reported epoch.
     await removeMemberFromChannel(deps, 'ch-4', 'member-to-remove');
-    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'ch-4', 3);
+    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'ch-4', 2);
+  });
+
+  // HUSHHQ-99 regression: merge the removal commit so the originator advances
+  // past the removal before sending. Without it the originator stays at the old
+  // epoch where the removed member still holds keys.
+  it('merges the pending commit after posting the removal', async () => {
+    await removeMemberFromChannel(deps, 'ch-4', 'member-to-remove');
+    expect(deps.hushCrypto.mergePendingCommit).toHaveBeenCalledWith(
+      new TextEncoder().encode('ch-4'),
+      deps.credential.signingPrivateKey,
+      deps.credential.signingPublicKey,
+      deps.credential.credentialBytes,
+    );
   });
 
   it('propagates removeMembers error', async () => {
