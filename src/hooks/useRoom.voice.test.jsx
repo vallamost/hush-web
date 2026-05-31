@@ -270,6 +270,8 @@ function makeWsClient() {
   return {
     on: vi.fn((event, handler) => { handlers[event] = handler; }),
     off: vi.fn((event) => { delete handlers[event]; }),
+    subscribeChannel: vi.fn(),
+    unsubscribeChannel: vi.fn(),
     _emit: (event, data) => handlers[event]?.(data),
   };
 }
@@ -351,6 +353,57 @@ describe('useRoom MLS voice E2EE', () => {
 
     expect(mockCreateVoiceGroup).toHaveBeenCalledTimes(1);
     expect(mockJoinVoiceGroup).not.toHaveBeenCalled();
+  });
+
+  // HUSHHQ-104: without a WS subscription to the voice channel topic, the server
+  // drops every mls.commit broadcast (join / rotation / eviction), so peers never
+  // converge on an epoch and decryption fails closed with mutual InvalidKey.
+  it('connectRoom subscribes to the voice channel WS topic so MLS commits are delivered', async () => {
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+
+    expect(wsClient.subscribeChannel).toHaveBeenCalledWith(CHANNEL_ID);
+  });
+
+  it('disconnectRoom unsubscribes from the voice channel WS topic', async () => {
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+
+    const { result } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    await act(async () => {
+      await result.current.disconnectRoom();
+    });
+
+    expect(wsClient.unsubscribeChannel).toHaveBeenCalledWith(CHANNEL_ID);
+  });
+
+  it('unmount unsubscribes from the voice channel WS topic', async () => {
+    mockGetMLSVoiceGroupInfo.mockResolvedValue(null);
+
+    const { result, unmount } = renderHook(() =>
+      useRoom({ wsClient, getToken, currentUserId: 'u1', getStore, voiceKeyRotationHours: 2 }),
+    );
+
+    await act(async () => {
+      await result.current.connectRoom(ROOM_NAME, 'TestUser', CHANNEL_ID);
+    });
+    act(() => {
+      unmount();
+    });
+
+    expect(wsClient.unsubscribeChannel).toHaveBeenCalledWith(CHANNEL_ID);
   });
 
   it('uses the instance base URL for LiveKit token and websocket in desktop-safe paths', async () => {

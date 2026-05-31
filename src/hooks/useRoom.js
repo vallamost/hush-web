@@ -807,9 +807,15 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
 
         wsClient.on('mls.commit', handleVoiceCommit);
         wsClient.on('voice_group_destroyed', handleVoiceGroupDestroyed);
+        // Subscribe to the voice channel's WS topic. The server fans mls.commit
+        // (external-join, key rotation, eviction) only to clients subscribed to
+        // the channel; without this the handler above never fires and peers never
+        // converge on an epoch (HUSHHQ-104). Refcounted + replayed on reconnect.
+        wsClient.subscribeChannel(channelId);
         voiceWsUnsubscribeRef.current = () => {
           wsClient.off('mls.commit', handleVoiceCommit);
           wsClient.off('voice_group_destroyed', handleVoiceGroupDestroyed);
+          wsClient.unsubscribeChannel(channelId);
         };
 
         // ─── Periodic Self-Update (key rotation) ─────────────────────────────
