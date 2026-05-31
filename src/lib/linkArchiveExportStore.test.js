@@ -13,7 +13,7 @@ import {
   isChunkConfirmed,
   listMissingChunks,
   EXPORT_STATUS_IN_PROGRESS,
-  EXPORT_STATUS_TERMINAL,
+  EXPORT_STATUS_COMPLETED,
   _clearAll,
 } from './linkArchiveExportStore';
 
@@ -120,32 +120,65 @@ describe('linkArchiveExportStore', () => {
     expect(found).toBeNull();
   });
 
-  it('sweepStaleExports removes terminal and past-deadline rows', async () => {
-    await makeBaseRecord({ archiveId: 'live' });
-    await makeBaseRecord({ archiveId: 'dead' });
-    await markExportTerminal('dead', 'boom');
-
-    // Forge a row whose hardDeadlineAt is in the past.
-    await makeBaseRecord({ archiveId: 'expired' });
-    const expired = await loadExport('expired');
-    expired.hardDeadlineAt = new Date(Date.now() - 60_000).toISOString();
-    // Re-put it under the same key.
+  // Re-put a record under the same key after mutating fields directly in
+  // IDB. Used to forge states (past deadline, completed) the public API
+  // does not expose a setter for.
+  async function forcePut(record) {
     const dbReq = indexedDB.open('hush-link-archive-exports');
     await new Promise((resolve, reject) => {
       dbReq.onsuccess = () => {
         const tx = dbReq.result.transaction('exports', 'readwrite');
-        tx.objectStore('exports').put(expired);
+        tx.objectStore('exports').put(record);
         tx.oncomplete = () => { dbReq.result.close(); resolve(); };
         tx.onerror = () => reject(tx.error);
       };
       dbReq.onerror = () => reject(dbReq.error);
     });
+  }
+
+  it('sweepStaleExports retains a terminal row whose hard deadline is still in the future', async () => {
+    // A terminal-failure row may still hold a live server-side archive
+    // slot when the in-session deleteArchive could not reach the server.
+    // sweep runs on mount without the root key and so cannot free the
+    // server slot; deleting the row here orphans the slot until the
+    // server's supersede grace expires. reclaimStaleExportArchives (which
+    // has the key) must get the chance to free it first.
+    await makeBaseRecord({ archiveId: 'dead' });
+    await markExportTerminal('dead', 'boom');
 
     const removed = await sweepStaleExports();
-    expect(removed).toBeGreaterThanOrEqual(2);
+    expect(removed).toBe(0);
+    expect(await loadExport('dead')).toBeTruthy();
+  });
+
+  it('sweepStaleExports removes completed, past-deadline, and stale-terminal rows', async () => {
+    await makeBaseRecord({ archiveId: 'live' });
+
+    // completed row: server slot already released on finalize.
+    await makeBaseRecord({ archiveId: 'done' });
+    const done = await loadExport('done');
+    done.status = EXPORT_STATUS_COMPLETED;
+    await forcePut(done);
+
+    // past hard deadline: the server has hard-expired the archive anyway.
+    await makeBaseRecord({ archiveId: 'expired' });
+    const expired = await loadExport('expired');
+    expired.hardDeadlineAt = new Date(Date.now() - 60_000).toISOString();
+    await forcePut(expired);
+
+    // terminal AND past deadline: also reapable (no slot left to free).
+    await makeBaseRecord({ archiveId: 'dead-expired' });
+    await markExportTerminal('dead-expired', 'boom');
+    const deadExpired = await loadExport('dead-expired');
+    deadExpired.hardDeadlineAt = new Date(Date.now() - 60_000).toISOString();
+    await forcePut(deadExpired);
+
+    const removed = await sweepStaleExports();
+    expect(removed).toBe(3);
     expect(await loadExport('live')).toBeTruthy();
-    expect(await loadExport('dead')).toBeNull();
+    expect(await loadExport('done')).toBeNull();
     expect(await loadExport('expired')).toBeNull();
+    expect(await loadExport('dead-expired')).toBeNull();
   });
 
   it('deleteExport removes a record idempotently', async () => {

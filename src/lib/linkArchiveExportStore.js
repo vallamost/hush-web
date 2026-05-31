@@ -61,10 +61,14 @@
  *     created (initialised after server returns archiveId)
  *       → in_progress (active upload)
  *       → completed   (finalize ok ⇒ row deleted)
- *       → terminal    (unrecoverable error ⇒ row deleted)
+ *       → terminal    (unrecoverable error ⇒ retained until the server
+ *                      slot is freed by reclaimStaleExportArchives, or
+ *                      until the hard deadline passes)
  *
- * `sweepStaleExports` removes records whose `hardDeadlineAt` is in the
- * past (matches the server's 7-day hard deadline).
+ * `sweepStaleExports` removes only `completed` rows and rows whose
+ * `hardDeadlineAt` is in the past (matches the server's 7-day hard
+ * deadline). It must not drop a `terminal_failure` row that may still
+ * hold a live server slot; see that function's doc comment.
  */
 
 const DB_NAME = 'hush-link-archive-exports';
@@ -382,9 +386,23 @@ export async function findResumableExport(baseUrl) {
 }
 
 /**
- * Remove records past their `hardDeadlineAt` or already in a terminal
- * status. Called on app start (or LinkDevice page mount) so abandoned
- * exports do not pile up in IDB and do not wedge a future link.
+ * Remove records that can no longer hold a live server-side archive slot.
+ * Called on app start (or LinkDevice page mount) so abandoned exports do
+ * not pile up in IDB.
+ *
+ * A record is reaped only when:
+ *   - it is `completed` (finalize released the slot already), or
+ *   - its `hardDeadlineAt` has passed (the server has hard-expired the
+ *     archive regardless of local state).
+ *
+ * A `terminal_failure` row whose hard deadline is still in the future is
+ * deliberately RETAINED. Such a row may still be holding a server slot
+ * when the in-session `deleteArchive` could not reach the server. sweep
+ * runs without the unlocked root key and so cannot unwrap the capability
+ * token to free the slot itself; deleting the row here would orphan the
+ * slot until the server's supersede grace expires, surfacing on the next
+ * link attempt as HTTP 409. `reclaimStaleExportArchives` (which has the
+ * key) frees the server side first, then drops the row.
  *
  * @returns {Promise<number>} number of records removed
  */
@@ -394,8 +412,8 @@ export async function sweepStaleExports() {
   let removed = 0;
   for (const row of all) {
     const past = row.hardDeadlineAt && new Date(row.hardDeadlineAt).getTime() < now;
-    const terminal = row.status === EXPORT_STATUS_COMPLETED || row.status === EXPORT_STATUS_TERMINAL;
-    if (past || terminal) {
+    const completed = row.status === EXPORT_STATUS_COMPLETED;
+    if (past || completed) {
       await deleteExport(row.archiveId);
       removed += 1;
     }
