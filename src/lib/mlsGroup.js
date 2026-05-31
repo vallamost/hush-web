@@ -738,20 +738,59 @@ export async function createVoiceGroup(deps, channelId) {
   const groupIdBytes = voiceChannelIdToBytes(channelId);
 
   await mlsStore.preloadGroupState(db);
-  const result = await hushCrypto.createGroup(groupIdBytes, sigPriv, sigPub, credBytes);
-  await mlsStore.flushStorageCache(db);
 
-  if (!result.groupInfoBytes || result.groupInfoBytes.length === 0) {
-    throw new Error(
-      `[mlsGroup] createGroup returned empty groupInfoBytes for voice:${channelId}` +
-      ` (type=${typeof result.groupInfoBytes}, epoch=${result.epoch})`
-    );
+  let groupInfoBytes;
+  let epoch;
+  let mutatedState = false;
+  try {
+    const result = await hushCrypto.createGroup(groupIdBytes, sigPriv, sigPub, credBytes);
+    mutatedState = true;
+    if (!result.groupInfoBytes || result.groupInfoBytes.length === 0) {
+      throw new Error(
+        `[mlsGroup] createGroup returned empty groupInfoBytes for voice:${channelId}` +
+        ` (type=${typeof result.groupInfoBytes}, epoch=${result.epoch})`
+      );
+    }
+    groupInfoBytes = result.groupInfoBytes;
+    epoch = result.epoch;
+  } catch (createErr) {
+    const msg = String(createErr?.message ?? createErr);
+    if (!(msg.includes('GroupAlreadyExists') || msg.includes('already exists'))) {
+      throw createErr;
+    }
+    // A local voice group from a previous session still exists, but the server
+    // deletes the voice GroupInfo when the room empties (the voice group is
+    // ephemeral server-side). Without handling this, every rejoiner would
+    // silently keep its own stale local group and never publish it, so two
+    // participants end up on divergent groups with different MLS exporter
+    // secrets and LiveKit reports mutual `InvalidKey`.
+    //
+    // Adopt the existing local group as authoritative: export its current
+    // GroupInfo and republish it, so other participants converge on it via
+    // external commit instead of each creating a divergent group. exportGroupInfo
+    // is read-only, so no storage flush is needed here.
+    const exported = await hushCrypto.exportGroupInfo(groupIdBytes, sigPriv, sigPub, credBytes);
+    if (!exported?.groupInfoBytes || exported.groupInfoBytes.length === 0) {
+      throw new Error(
+        `[mlsGroup] exportGroupInfo returned empty groupInfoBytes for existing voice:${channelId}`
+      );
+    }
+    groupInfoBytes = exported.groupInfoBytes;
+    // exportGroupInfo does not return an epoch; the authoritative epoch is
+    // embedded in the GroupInfo bytes. Use the locally tracked epoch for the
+    // server's ordering column, defaulting to 0 when unknown.
+    const storedEpoch = await mlsStore.getGroupEpoch(db, `voice:${channelId}`);
+    epoch = Number(storedEpoch ?? 0);
   }
 
-  await api.putMLSVoiceGroupInfo(token, channelId, toBase64(result.groupInfoBytes), result.epoch);
-  await mlsStore.setGroupEpoch(db, `voice:${channelId}`, result.epoch);
+  if (mutatedState) {
+    await mlsStore.flushStorageCache(db);
+  }
 
-  return { epoch: result.epoch };
+  await api.putMLSVoiceGroupInfo(token, channelId, toBase64(groupInfoBytes), epoch);
+  await mlsStore.setGroupEpoch(db, `voice:${channelId}`, epoch);
+
+  return { epoch };
 }
 
 /**

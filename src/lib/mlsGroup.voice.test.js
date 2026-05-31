@@ -60,6 +60,9 @@ function makeHushCrypto() {
       frameKeyBytes: new Uint8Array(32).fill(0xab),
       epoch: 1,
     }),
+    exportGroupInfo: vi.fn().mockResolvedValue({
+      groupInfoBytes: new Uint8Array([91, 92, 93]),
+    }),
   };
 }
 
@@ -141,6 +144,43 @@ describe('mlsGroup voice lifecycle', () => {
       0,
     );
     expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 0);
+  });
+
+  // HUSHHQ-97 regression: on rejoin after the server cleaned up the voice
+  // group (room emptied), the local voice group still exists, so createGroup
+  // throws GroupAlreadyExists. createVoiceGroup must adopt the existing local
+  // group and republish its GroupInfo, NOT silently continue without a PUT.
+  // Without this, two participants diverge and LiveKit reports InvalidKey.
+  it('createVoiceGroup adopts and republishes an existing local group on GroupAlreadyExists', async () => {
+    deps.hushCrypto.createGroup.mockRejectedValueOnce(new Error('GroupAlreadyExists'));
+    deps.mlsStore.getGroupEpoch.mockResolvedValueOnce(5);
+
+    const result = await createVoiceGroup(deps, 'ch-1');
+
+    // Adopted the existing group via exportGroupInfo (read-only).
+    expect(deps.hushCrypto.exportGroupInfo).toHaveBeenCalledWith(
+      voiceChannelIdToBytes('ch-1'),
+      deps.credential.signingPrivateKey,
+      deps.credential.signingPublicKey,
+      deps.credential.credentialBytes,
+    );
+    // Republished it to the server so other participants converge.
+    expect(deps.api.putMLSVoiceGroupInfo).toHaveBeenCalledWith(
+      'test-token',
+      'ch-1',
+      expect.any(String),
+      5,
+    );
+    expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 5);
+    expect(result).toEqual({ epoch: 5 });
+    // Read-only adoption path must not flush (no MLS state mutation).
+    expect(deps.mlsStore.flushStorageCache).not.toHaveBeenCalled();
+  });
+
+  it('createVoiceGroup rethrows a non-already-exists createGroup error', async () => {
+    deps.hushCrypto.createGroup.mockRejectedValueOnce(new Error('storage backend offline'));
+    await expect(createVoiceGroup(deps, 'ch-1')).rejects.toThrow('storage backend offline');
+    expect(deps.api.putMLSVoiceGroupInfo).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------
