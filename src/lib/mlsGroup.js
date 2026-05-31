@@ -786,16 +786,16 @@ export async function createVoiceGroup(deps, channelId) {
     //
     // Adopt the existing local group as authoritative: export its current
     // GroupInfo and republish it, so other participants converge on it via
-    // external commit instead of each creating a divergent group. exportGroupInfo
-    // is read-only, so no storage flush is needed here.
-    const exported = await hushCrypto.exportGroupInfo(groupIdBytes, sigPriv, sigPub, credBytes);
+    // external commit instead of each creating a divergent group.
+    // exportGroupInfoBytes is read-only, so no storage flush is needed here.
+    const exported = await hushCrypto.exportGroupInfoBytes(groupIdBytes, sigPriv, sigPub, credBytes);
     if (!exported?.groupInfoBytes || exported.groupInfoBytes.length === 0) {
       throw new Error(
-        `[mlsGroup] exportGroupInfo returned empty groupInfoBytes for existing voice:${channelId}`
+        `[mlsGroup] exportGroupInfoBytes returned empty groupInfoBytes for existing voice:${channelId}`
       );
     }
     groupInfoBytes = exported.groupInfoBytes;
-    // exportGroupInfo does not return an epoch; the authoritative epoch is
+    // exportGroupInfoBytes does not return an epoch; the authoritative epoch is
     // embedded in the GroupInfo bytes. Use the locally tracked epoch for the
     // server's ordering column, defaulting to 0 when unknown.
     const storedEpoch = await mlsStore.getGroupEpoch(db, `voice:${channelId}`);

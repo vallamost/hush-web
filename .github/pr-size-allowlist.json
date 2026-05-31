@@ -59,7 +59,7 @@
     "src/lib/linkArchiveTransport.js": 479,
     "src/lib/mlsGroup.js": 1026,
     "src/lib/mlsGroup.test.js": 726,
-    "src/lib/mlsGroup.voice.test.js": 362,
+    "src/lib/mlsGroup.voice.test.js": 378,
     "src/lib/preDecryptForLinkExport.test.js": 329,
     "src/lib/mlsStore.js": 864,
     "src/lib/mlsStore.test.js": 721,

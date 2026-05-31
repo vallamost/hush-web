@@ -9,6 +9,7 @@ import {
   removeMemberFromVoiceGroup,
   voiceChannelIdToBytes,
 } from './mlsGroup';
+import * as realHushCrypto from './hushCrypto';
 
 // ---------------------------------------------------------------------------
 // Shared mock factory
@@ -60,11 +61,26 @@ function makeHushCrypto() {
       frameKeyBytes: new Uint8Array(32).fill(0xab),
       epoch: 1,
     }),
-    exportGroupInfo: vi.fn().mockResolvedValue({
+    exportGroupInfoBytes: vi.fn().mockResolvedValue({
       groupInfoBytes: new Uint8Array([91, 92, 93]),
     }),
   };
 }
+
+// HUSHHQ-97 regression guard: the hand-rolled hushCrypto mock must only name
+// methods that actually exist on the real facade. A typo'd binding name (e.g.
+// `exportGroupInfo` instead of `exportGroupInfoBytes`) previously passed CI
+// because the mock defined the wrong name, then threw in production.
+describe('hushCrypto mock fidelity', () => {
+  it('only mocks methods that exist on the real hushCrypto facade', () => {
+    for (const name of Object.keys(makeHushCrypto())) {
+      expect(
+        typeof realHushCrypto[name],
+        `hushCrypto.${name} is mocked but does not exist on the real facade`,
+      ).toBe('function');
+    }
+  });
+});
 
 function makeApi() {
   return {
@@ -157,8 +173,8 @@ describe('mlsGroup voice lifecycle', () => {
 
     const result = await createVoiceGroup(deps, 'ch-1');
 
-    // Adopted the existing group via exportGroupInfo (read-only).
-    expect(deps.hushCrypto.exportGroupInfo).toHaveBeenCalledWith(
+    // Adopted the existing group via exportGroupInfoBytes (read-only).
+    expect(deps.hushCrypto.exportGroupInfoBytes).toHaveBeenCalledWith(
       voiceChannelIdToBytes('ch-1'),
       deps.credential.signingPrivateKey,
       deps.credential.signingPublicKey,
