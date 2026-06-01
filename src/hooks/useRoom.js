@@ -9,6 +9,7 @@ import * as mlsGroupLib from '../lib/mlsGroup';
 import * as mlsStoreLib from '../lib/mlsStore';
 import * as hushCryptoLib from '../lib/hushCrypto';
 import * as apiLib from '../lib/api';
+import { createVoiceMlsSession } from '../lib/voiceMlsSession';
 import { getDeviceId } from './useAuth';
 import {
   parseVoiceParticipantMlsIdentity,
@@ -37,18 +38,6 @@ import {
   unwatchScreen as trackUnwatchScreen,
 } from '../lib/trackManager';
 import { DEFAULT_QUALITY, MEDIA_SOURCES } from '../utils/constants';
-
-/**
- * Decode a base64 string to a Uint8Array.
- * @param {string} b64
- * @returns {Uint8Array}
- */
-function fromBase64(b64) {
-  const bin = atob(b64);
-  const arr = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
-  return arr;
-}
 
 function shouldUseActiveInstanceForVoice() {
   if (typeof window === 'undefined') return false;
@@ -754,69 +743,37 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         roomRef.current = room;
 
         // ─── Voice MLS WS Listeners ──────────────────────────────────────────
-        // Re-derive frame key when a voice commit advances the epoch.
-        const handleVoiceCommit = async (data) => {
-          if (data.group_type !== 'voice' || data.channel_id !== channelIdRef.current) return;
-          // Own commits are already applied locally when we sent them
-          if (data.sender_id === currentUserId && data.sender_device_id === getDeviceId()) return;
-          try {
-            const db = await getStore();
-            const credential = await mlsStoreLib.getCredential(db);
-            const tok = getToken();
-            const mlsDeps = {
-              db,
-              token: tok,
-              credential,
-              mlsStore: mlsStoreLib,
-              hushCrypto: hushCryptoLib,
-              api: voiceMlsApi,
-            };
-            const commitBytes = fromBase64(data.commit_bytes);
-            await mlsGroupLib.processVoiceCommit(mlsDeps, data.channel_id, commitBytes);
-            const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, data.channel_id);
+        // Subscribe to the voice channel topic and route mls.commit frames into
+        // the MLS group so participants converge (HUSHHQ-104). The dispatch lives
+        // in voiceMlsSession.js so the exact same seam runs in the E2E harness;
+        // the LiveKit/React side effects stay here behind onFrameKey.
+        const voiceSession = createVoiceMlsSession({
+          wsClient,
+          channelId,
+          getActiveChannelId: () => channelIdRef.current,
+          currentUserId,
+          getDeviceId,
+          getStore,
+          getToken,
+          mlsStore: mlsStoreLib,
+          hushCrypto: hushCryptoLib,
+          mlsGroup: mlsGroupLib,
+          voiceApi: voiceMlsApi,
+          onFrameKey: async (frameKeyBytes, epoch) => {
             if (e2eeKeyProviderRef.current) {
               await e2eeKeyProviderRef.current.setKey(new Uint8Array(frameKeyBytes), epoch % 256);
             }
             setVoiceEpoch(epoch);
             voiceEpochRef.current = epoch;
-          } catch (err) {
+          },
+          onCommitError: (err) => {
             console.error('[livekit] Failed to process voice MLS commit:', err);
-          }
-        };
-
-        // Clean up local state when the server signals the voice group is gone
-        // (last participant left and webhook fired DeleteMLSGroupInfo).
-        const handleVoiceGroupDestroyed = async (data) => {
-          if (data.channel_id !== channelIdRef.current) return;
-          try {
-            const db = await getStore();
-            const credential = await mlsStoreLib.getCredential(db);
-            const mlsDeps = {
-              db,
-              token: getToken(),
-              credential,
-              mlsStore: mlsStoreLib,
-              hushCrypto: hushCryptoLib,
-              api: voiceMlsApi,
-            };
-            await mlsGroupLib.destroyVoiceGroup(mlsDeps, data.channel_id);
-          } catch (err) {
+          },
+          onDestroyError: (err) => {
             console.warn('[livekit] voice_group_destroyed cleanup failed:', err);
-          }
-        };
-
-        wsClient.on('mls.commit', handleVoiceCommit);
-        wsClient.on('voice_group_destroyed', handleVoiceGroupDestroyed);
-        // Subscribe to the voice channel's WS topic. The server fans mls.commit
-        // (external-join, key rotation, eviction) only to clients subscribed to
-        // the channel; without this the handler above never fires and peers never
-        // converge on an epoch (HUSHHQ-104). Refcounted + replayed on reconnect.
-        wsClient.subscribeChannel(channelId);
-        voiceWsUnsubscribeRef.current = () => {
-          wsClient.off('mls.commit', handleVoiceCommit);
-          wsClient.off('voice_group_destroyed', handleVoiceGroupDestroyed);
-          wsClient.unsubscribeChannel(channelId);
-        };
+          },
+        });
+        voiceWsUnsubscribeRef.current = () => voiceSession.dispose();
 
         // ─── Periodic Self-Update (key rotation) ─────────────────────────────
         const rotationMs = (voiceKeyRotationHours ?? 2) * 3600000;
