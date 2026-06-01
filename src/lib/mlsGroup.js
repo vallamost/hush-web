@@ -107,6 +107,20 @@ function fromBase64(b64) {
 }
 
 /**
+ * Encodes member identity strings (`userId:deviceId`) as the base64 byte
+ * strings hushCrypto.removeMembers expects. The WASM binding base64-decodes
+ * each entry and matches it against the leaf credential identity, which is the
+ * UTF-8 bytes of the identity (hush-crypto credential.rs / wasm.rs). Passing the
+ * raw string makes the decode fail on the first `-` of a UUID (HUSHHQ-105).
+ * @param {string[]} identities
+ * @returns {string} JSON array of base64-encoded identity byte strings
+ */
+function encodeMemberIdentitiesJson(identities) {
+  const enc = new TextEncoder();
+  return JSON.stringify(identities.map((id) => toBase64(enc.encode(id))));
+}
+
+/**
  * Extracts a string message from an unknown thrown value without assuming Error.
  * @param {unknown} err
  * @returns {string}
@@ -403,7 +417,7 @@ export async function removeMemberFromChannel(deps, channelId, memberIdentity) {
   const { db, token, mlsStore, hushCrypto, api } = deps;
   const { sigPriv, sigPub, credBytes } = getCredFields(deps);
   const channelIdBytes = channelIdToBytes(channelId);
-  const memberIdentitiesJson = JSON.stringify([memberIdentity]);
+  const memberIdentitiesJson = encodeMemberIdentitiesJson([memberIdentity]);
 
   await mlsStore.preloadGroupState(db);
   const result = await hushCrypto.removeMembers(channelIdBytes, sigPriv, sigPub, credBytes, memberIdentitiesJson);
@@ -1042,7 +1056,7 @@ export async function removeMemberFromVoiceGroup(deps, channelId, memberIdentity
   const { db, token, mlsStore, hushCrypto, api } = deps;
   const { sigPriv, sigPub, credBytes } = getCredFields(deps);
   const groupIdBytes = voiceChannelIdToBytes(channelId);
-  const memberIdentitiesJson = JSON.stringify([memberIdentity]);
+  const memberIdentitiesJson = encodeMemberIdentitiesJson([memberIdentity]);
 
   await mlsStore.preloadGroupState(db);
   const result = await hushCrypto.removeMembers(
@@ -1061,7 +1075,16 @@ export async function removeMemberFromVoiceGroup(deps, channelId, memberIdentity
     result.epoch,
     toBase64(result.groupInfoBytes),
   );
-  await mlsStore.setGroupEpoch(db, `voice:${channelId}`, result.epoch);
+
+  // Merge the pending removal commit so this remover advances past the removal
+  // and re-derives the frame key at the new epoch. The remover does not receive
+  // its own mls.commit broadcast (handleVoiceCommit skips own commits), so
+  // without this it stays at the pre-removal epoch and exportVoiceFrameKey
+  // re-derives the OLD key. Mirrors removeMemberFromChannel (HUSHHQ-99/105).
+  await mlsStore.preloadGroupState(db);
+  const mergeResult = await hushCrypto.mergePendingCommit(groupIdBytes, sigPriv, sigPub, credBytes);
+  await mlsStore.flushStorageCache(db);
+  await mlsStore.setGroupEpoch(db, `voice:${channelId}`, mergeResult.epoch);
 }
 
 /**

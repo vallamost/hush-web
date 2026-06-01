@@ -389,16 +389,20 @@ describe('removeMemberFromChannel', () => {
     deps = makeDeps();
   });
 
-  it('calls removeMembers with member identity and posts commit', async () => {
+  it('calls removeMembers with the base64-encoded member identity and posts commit', async () => {
     await removeMemberFromChannel(deps, 'ch-4', 'member-identity-hex');
 
-    expect(deps.hushCrypto.removeMembers).toHaveBeenCalledWith(
-      new TextEncoder().encode('ch-4'),
-      deps.credential.signingPrivateKey,
-      deps.credential.signingPublicKey,
-      deps.credential.credentialBytes,
-      expect.stringContaining('member-identity-hex'),
-    );
+    // HUSHHQ-105: removeMembers takes a JSON array of base64-encoded identity
+    // bytes, not the raw string. Decode the last arg to assert the contract.
+    const args = deps.hushCrypto.removeMembers.mock.calls[0];
+    expect(args[0]).toEqual(new TextEncoder().encode('ch-4'));
+    expect(args[1]).toBe(deps.credential.signingPrivateKey);
+    expect(args[2]).toBe(deps.credential.signingPublicKey);
+    expect(args[3]).toBe(deps.credential.credentialBytes);
+    const passedIdentities = JSON.parse(args[4]);
+    expect(passedIdentities).toHaveLength(1);
+    expect(atob(passedIdentities[0])).toBe('member-identity-hex');
+
     expect(deps.api.postMLSCommit).toHaveBeenCalledWith(
       'test-token',
       'ch-4',

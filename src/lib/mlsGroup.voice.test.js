@@ -331,11 +331,13 @@ describe('mlsGroup voice lifecycle', () => {
       expect(args[1]).toBe(deps.credential.signingPrivateKey);
       expect(args[2]).toBe(deps.credential.signingPublicKey);
       expect(args[3]).toBe(deps.credential.credentialBytes);
-      // memberIdentitiesJson is the device-scoped identity, not a
-      // bare user id. This is the load-bearing assertion that
-      // closes PR #40's incorrect `participant.identity` removal
-      // target.
-      expect(args[4]).toBe(JSON.stringify(['u-leaver:d-leaver']));
+      // memberIdentitiesJson is the device-scoped identity, base64-encoded as
+      // hushCrypto.removeMembers requires (HUSHHQ-105). It must still carry the
+      // exact `userId:deviceId` leaf, closing PR #40's bare-`participant.identity`
+      // removal target. Decode to assert both the encoding and the payload.
+      const passedIdentities = JSON.parse(args[4]);
+      expect(passedIdentities).toHaveLength(1);
+      expect(atob(passedIdentities[0])).toBe('u-leaver:d-leaver');
 
       // Commit must reach the server through the deps-injected
       // (instance-scoped) voice API, never a raw apiLib call.
@@ -346,11 +348,14 @@ describe('mlsGroup voice lifecycle', () => {
       expect(channelId).toBe('ch-1');
       expect(typeof commitB64).toBe('string');
       expect(typeof groupInfoB64).toBe('string');
+      // The posted commit carries the removeMembers epoch.
       expect(epoch).toBe(4);
 
-      // Persist under the voice-scoped epoch key so text-channel
-      // epoch storage is unaffected.
-      expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 4);
+      // HUSHHQ-105: the remover merges the pending removal commit and persists
+      // the MERGED epoch (it never receives its own broadcast), so the stored
+      // voice epoch reflects the merge result, not the bare removeMembers epoch.
+      expect(deps.hushCrypto.mergePendingCommit).toHaveBeenCalled();
+      expect(deps.mlsStore.setGroupEpoch).toHaveBeenCalledWith(deps.db, 'voice:ch-1', 1);
     });
 
     it('throws before invoking crypto when memberIdentity is a bare user id (no colon)', async () => {
