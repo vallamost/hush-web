@@ -34,12 +34,27 @@ decrypt).
 Line-delimited JSON. One command per stdin line, one event per stdout line.
 `console.log`/`info`/`debug` are routed to stderr so stdout carries only events.
 
-Commands: `start`, `create`, `join`, `await_epoch` (`{epoch}`), `remove`
+Voice commands: `start`, `create`, `join`, `await_epoch` (`{epoch}`), `remove`
 (`{identity:"<userId>:<deviceId>"}`), `encrypt` (`{nonceHex, plaintext}`),
 `decrypt` (`{nonceHex, b64}`), `exit`.
 
+Text commands: `text_start`, `text_create`, `text_join`, `text_await_epoch`
+(`{epoch}`), `send_text` (`{plaintext}`), `text_remove`
+(`{identity:"<userId>:<deviceId>"}`).
+
 Events: `setup_done`, `started`, `created`, `joined`, `epoch_reached`, `removed`,
-`frame_key`, `ciphertext`, `decrypted`, `commit_error`, `error`, `fatal`, `bye`.
+`frame_key`, `ciphertext`, `decrypted`, `commit_error`; `text_started`,
+`text_created`, `text_joined`, `text_epoch_reached`, `text_sent`,
+`text_received`, `text_removed`, `text_commit_error`, `text_decrypt_error`;
+`error`, `fatal`, `bye`.
+
+## Coverage
+
+`e2e:protocol` (voice) and `e2e:chat-delivery-headless` (text). They prove
+protocol-level convergence/delivery through the real server, real WS, real MLS
+groups, and real crypto. They do NOT prove React rendering / message-list UI /
+notifications, real LiveKit/WebRTC media, or FrameCryptor `decryptFailures`.
+That is the deferred Playwright media/UI milestone (`e2e:media-delivery`).
 
 ## Running
 

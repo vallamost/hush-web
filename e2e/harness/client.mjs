@@ -264,6 +264,71 @@ function startVoiceSession(client, channelId, frameState) {
   });
 }
 
+/**
+ * Text-channel MLS session for the chat-delivery scenario. Mirrors the voice
+ * session: subscribe the channel WS topic, advance the local text group on peer
+ * commits, and decrypt incoming `message.new` ciphertext into plaintext. Own
+ * echoes are skipped on the device-precise (sender_id, sender_device_id) pair so
+ * the harness never masks a multi-device bug. Assertions live on the decrypted
+ * plaintext outcome (`text_received`), never on these handlers firing.
+ */
+function startTextSession(client, channelId) {
+  const { wsClient, mlsGroup } = client;
+  const isOwnEcho = (data) =>
+    data.sender_id === client.userId && data.sender_device_id === client.deviceId;
+
+  const handleCommit = async (data) => {
+    if (data.group_type === 'voice' || data.channel_id !== channelId || isOwnEcho(data)) return;
+    try {
+      await mlsGroup.processCommit(client.buildMlsDeps(), channelId, fromBase64(data.commit_bytes));
+    } catch (err) {
+      emit('text_commit_error', { error: String(err?.message ?? err) });
+    }
+  };
+
+  const handleMessage = async (data) => {
+    if (data.channel_id !== channelId || isOwnEcho(data)) return;
+    try {
+      const res = await mlsGroup.decryptMessage(client.buildMlsDeps(), channelId, fromBase64(data.ciphertext));
+      if (res.plaintext != null) {
+        emit('text_received', { plaintext: res.plaintext, senderId: data.sender_id, epoch: res.epoch });
+      }
+    } catch (err) {
+      emit('text_decrypt_error', { error: String(err?.message ?? err) });
+    }
+  };
+
+  wsClient.on('mls.commit', handleCommit);
+  wsClient.on('message.new', handleMessage);
+  wsClient.subscribeChannel(channelId);
+
+  return {
+    dispose() {
+      wsClient.off('mls.commit', handleCommit);
+      wsClient.off('message.new', handleMessage);
+      wsClient.unsubscribeChannel(channelId);
+    },
+  };
+}
+
+/** Reads the locally stored MLS epoch for a text channel group (0 when unset). */
+async function readGroupEpoch(client, channelId) {
+  const deps = client.buildMlsDeps();
+  const epoch = await deps.mlsStore.getGroupEpoch(deps.db, channelId);
+  return Number(epoch ?? 0);
+}
+
+/** Polls until the local text group epoch reaches target (advanced by peer commits). */
+async function waitForTextEpoch(client, channelId, target, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while ((await readGroupEpoch(client, channelId)) !== target) {
+    if (Date.now() > deadline) {
+      throw new Error(`text epoch ${target} not reached (current ${await readGroupEpoch(client, channelId)})`);
+    }
+    await sleep(EPOCH_POLL_INTERVAL_MS);
+  }
+}
+
 /** Polls until the local converged epoch reaches target (set async by onFrameKey). */
 async function waitForEpoch(frameState, target, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
@@ -331,8 +396,40 @@ async function handleCommand(cmd, ctx) {
       }
       return;
     }
+    case 'text_start': {
+      ctx.textSession = startTextSession(client, channelId);
+      emit('text_started', {});
+      return;
+    }
+    case 'text_create': {
+      await client.mlsGroup.createChannelGroup(client.buildMlsDeps(), channelId);
+      emit('text_created', { epoch: await readGroupEpoch(client, channelId) });
+      return;
+    }
+    case 'text_join': {
+      await client.mlsGroup.joinChannelGroup(client.buildMlsDeps(), channelId);
+      emit('text_joined', { epoch: await readGroupEpoch(client, channelId) });
+      return;
+    }
+    case 'text_await_epoch': {
+      await waitForTextEpoch(client, channelId, cmd.epoch, cmd.timeoutMs ?? EPOCH_WAIT_TIMEOUT_MS);
+      emit('text_epoch_reached', { epoch: await readGroupEpoch(client, channelId) });
+      return;
+    }
+    case 'send_text': {
+      const { messageBytes, localId } = await client.mlsGroup.encryptMessage(client.buildMlsDeps(), channelId, cmd.plaintext);
+      client.wsClient.send('message.send', { channel_id: channelId, ciphertext: toBase64(messageBytes), local_id: localId });
+      emit('text_sent', { localId });
+      return;
+    }
+    case 'text_remove': {
+      await client.mlsGroup.removeMemberFromChannel(client.buildMlsDeps(), channelId, cmd.identity);
+      emit('text_removed', { epoch: await readGroupEpoch(client, channelId) });
+      return;
+    }
     case 'exit': {
       if (ctx.session) ctx.session.dispose();
+      if (ctx.textSession) ctx.textSession.dispose();
       client.wsClient.disconnect();
       emit('bye', {});
       process.exit(0);
@@ -402,7 +499,7 @@ async function main() {
   const mods = await loadModules();
   const client = await bootstrapClient(args, mods);
 
-  const ctx = { client, channelId: args.channel, frameState: { epoch: null, frameKeyBytes: null }, session: null };
+  const ctx = { client, channelId: args.channel, frameState: { epoch: null, frameKeyBytes: null }, session: null, textSession: null };
   emit('setup_done', { userId: client.userId, deviceId: client.deviceId });
 
   const rl = createInterface({ input: process.stdin });
