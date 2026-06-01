@@ -1,5 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Room, RoomEvent, Track, ExternalE2EEKeyProvider } from 'livekit-client';
+import {
+  isE2eeDiagnosticsEnabled,
+  installE2eeDiagnostics,
+  recordKeyEpoch,
+  recordDecryptFailure,
+} from '../lib/e2eeDiagnostics.js';
 
 // Import E2EE worker for LiveKit encryption
 // @ts-ignore - Vite will resolve this URL correctly
@@ -375,6 +381,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         let worker = null;
 
         try {
+          installE2eeDiagnostics(isE2eeDiagnosticsEnabled());
           keyProvider = new ExternalE2EEKeyProvider();
           e2eeKeyProviderRef.current = keyProvider;
           worker = new E2EEWorker();
@@ -405,6 +412,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           // Derive frame key from MLS export_secret and apply to LiveKit key provider
           const { frameKeyBytes, epoch: initialEpoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelId);
           await keyProvider.setKey(new Uint8Array(frameKeyBytes), initialEpoch % 256);
+          recordKeyEpoch(initialEpoch);
 
           setVoiceEpoch(initialEpoch);
           voiceEpochRef.current = initialEpoch;
@@ -433,6 +441,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         };
 
         const room = new Room(roomOptions);
+        if (isE2eeDiagnosticsEnabled() && typeof window !== 'undefined') {
+          window.__hushRoom = room;
+        }
 
         // LiveKit's E2EE manager is configured by `roomOptions.e2ee`, but the
         // per-frame encryption transformer stays dormant until
@@ -598,6 +609,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
                   epoch % 256,
                 );
               }
+              recordKeyEpoch(epoch);
               setVoiceEpoch(epoch);
               voiceEpochRef.current = epoch;
               console.log(
@@ -680,6 +692,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);
             if (e2eeKeyProviderRef.current) {
               await e2eeKeyProviderRef.current.setKey(new Uint8Array(frameKeyBytes), epoch % 256);
+              recordKeyEpoch(epoch);
             }
             setVoiceEpoch(epoch);
             voiceEpochRef.current = epoch;
@@ -716,6 +729,10 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
           if (isStale()) return;
           setActiveSpeakerIds(speakers.map((s) => s.identity));
+        });
+
+        room.on(RoomEvent.EncryptionError, (error) => {
+          recordDecryptFailure(error?.name ?? error?.message ?? 'EncryptionError');
         });
 
         // Browser builds use the current origin. Electron's packaged
@@ -762,6 +779,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           onFrameKey: async (frameKeyBytes, epoch) => {
             if (e2eeKeyProviderRef.current) {
               await e2eeKeyProviderRef.current.setKey(new Uint8Array(frameKeyBytes), epoch % 256);
+              recordKeyEpoch(epoch);
             }
             setVoiceEpoch(epoch);
             voiceEpochRef.current = epoch;
@@ -794,6 +812,7 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
             const { frameKeyBytes, epoch } = await mlsGroupLib.exportVoiceFrameKey(mlsDeps, channelIdRef.current);
             if (e2eeKeyProviderRef.current) {
               await e2eeKeyProviderRef.current.setKey(new Uint8Array(frameKeyBytes), epoch % 256);
+              recordKeyEpoch(epoch);
             }
             setVoiceEpoch(epoch);
             voiceEpochRef.current = epoch;
