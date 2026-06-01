@@ -43,7 +43,7 @@ const httpsEnabled = process.env.VITE_HTTPS === 'true';
 // see a fully trusted cert and stop hitting ERR_CERT_AUTHORITY_INVALID
 // on every fetch. Falls back to the auto-generated self-signed cert
 // from @vitejs/plugin-basic-ssl when the files are not present (so a
-// fresh checkout still works without setup). Dev-only — the .certs/
+// fresh checkout still works without setup). Dev-only (the .certs/
 // directory is gitignored.
 const mkcertKeyPath = path.resolve(__dirname, '.certs/dev-key.pem');
 const mkcertCertPath = path.resolve(__dirname, '.certs/dev-cert.pem');
@@ -70,6 +70,12 @@ export default defineConfig(({ mode }) => ({
     __HUSH_ERUDA__: JSON.stringify(
       mode !== 'production' && process.env.VITE_ERUDA === 'true',
     ),
+    // E2E diagnostics flag. VITE_E2E_DIAG is not in envPrefix (it must never
+    // appear in production assets), so it is injected as a define constant here
+    // and rewritten into import.meta.env.VITE_E2E_DIAG at build time.
+    'import.meta.env.VITE_E2E_DIAG': JSON.stringify(
+      process.env.VITE_E2E_DIAG ?? '',
+    ),
   },
   plugins: [
     wasmContentTypePlugin,
@@ -78,7 +84,7 @@ export default defineConfig(({ mode }) => ({
     tailwindcss(),
     react(),
     // basicSsl auto-generates a self-signed cert at runtime. Skip it
-    // when an mkcert pair is on disk — Vite reads our cert/key from
+    // when an mkcert pair is on disk, Vite reads our cert/key from
     // server.https below instead.
     ...(httpsEnabled && !hasMkcertPair ? [basicSsl()] : []),
     // PWA / Service Worker. Conservative: precache app-shell only, never
