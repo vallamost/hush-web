@@ -1,6 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { releaseLocalCaptureTracks, stopLocalMediaTrack } from './trackManager';
+import {
+  releaseLocalCaptureTracks,
+  skipScreenShareConstraints,
+  stopLocalMediaTrack,
+} from './trackManager';
 
 describe('stopLocalMediaTrack', () => {
   it('stops both LiveKit wrapper and underlying media stream track', () => {
@@ -72,5 +76,25 @@ describe('releaseLocalCaptureTracks', () => {
   it('is safe when the ref is missing or already empty', () => {
     expect(() => releaseLocalCaptureTracks(null)).not.toThrow();
     expect(() => releaseLocalCaptureTracks({ current: new Map() })).not.toThrow();
+  });
+});
+
+describe('skipScreenShareConstraints', () => {
+  afterEach(() => {
+    delete window.hushDesktop;
+  });
+
+  it('returns true on the Electron desktop renderer (skip applyConstraints, electron #44684)', () => {
+    window.hushDesktop = { isDesktop: true };
+    expect(skipScreenShareConstraints()).toBe(true);
+  });
+
+  it('returns false in a browser so resolution/framerate pinning is unchanged', () => {
+    expect(skipScreenShareConstraints()).toBe(false);
+  });
+
+  it('returns false when the desktop bridge is present but isDesktop is not true', () => {
+    window.hushDesktop = {};
+    expect(skipScreenShareConstraints()).toBe(false);
   });
 });

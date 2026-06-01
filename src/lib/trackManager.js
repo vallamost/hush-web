@@ -16,6 +16,22 @@ import {
 } from '../utils/constants';
 
 /**
+ * True on the Electron desktop renderer, where getDisplayMedia is served by the
+ * experimental macOS system picker (useSystemPicker). Calling applyConstraints
+ * on the resulting screen track re-prompts/invalidates the OS picker selection,
+ * so the share never starts and the picker cannot reopen
+ * (electron/electron#44684, #39566). Callers skip constraint pinning here; the
+ * getDisplayMedia frameRate.ideal hint still applies and LiveKit publish caps
+ * bitrate/framerate. Browsers are unaffected (returns false), so their
+ * resolution/framerate pinning is unchanged.
+ *
+ * @returns {boolean}
+ */
+export function skipScreenShareConstraints() {
+  return typeof window !== 'undefined' && window.hushDesktop?.isDesktop === true;
+}
+
+/**
  * Stop a LiveKit local track and its underlying MediaStreamTrack.
  *
  * LiveKit's wrapper `stop()` should release capture, but Electron/macOS can
@@ -125,22 +141,26 @@ export async function publishScreen(room, refs, options = {}) {
     quality.frameRate >= SCREEN_SHARE_MIN_FPS
       ? { ideal: quality.frameRate, min: SCREEN_SHARE_MIN_FPS }
       : { ideal: quality.frameRate };
-  if (quality.width && quality.height) {
-    try {
-      // min ensures we get full resolution (e.g. 1080p) when the source supports it, not a lower scale.
-      await videoTrack.applyConstraints({
-        width: { ideal: quality.width, min: quality.width },
-        height: { ideal: quality.height, min: quality.height },
-        frameRate: frameRateConstraint,
-      });
-    } catch (err) {
-      console.warn('[livekit] Could not apply track constraints:', err);
-    }
-  } else if (quality.frameRate >= SCREEN_SHARE_MIN_FPS) {
-    try {
-      await videoTrack.applyConstraints({ frameRate: frameRateConstraint });
-    } catch (err) {
-      console.warn('[livekit] Could not apply frameRate constraints:', err);
+  // Desktop (Electron macOS system picker) cannot take applyConstraints on a
+  // screen track without breaking the OS picker (see skipScreenShareConstraints).
+  if (!skipScreenShareConstraints()) {
+    if (quality.width && quality.height) {
+      try {
+        // min ensures we get full resolution (e.g. 1080p) when the source supports it, not a lower scale.
+        await videoTrack.applyConstraints({
+          width: { ideal: quality.width, min: quality.width },
+          height: { ideal: quality.height, min: quality.height },
+          frameRate: frameRateConstraint,
+        });
+      } catch (err) {
+        console.warn('[livekit] Could not apply track constraints:', err);
+      }
+    } else if (quality.frameRate >= SCREEN_SHARE_MIN_FPS) {
+      try {
+        await videoTrack.applyConstraints({ frameRate: frameRateConstraint });
+      } catch (err) {
+        console.warn('[livekit] Could not apply frameRate constraints:', err);
+      }
     }
   }
   const localVideoTrack = new LocalVideoTrack(videoTrack);
@@ -240,21 +260,25 @@ export async function switchScreenSource(room, refs, qualityKey, unpublishScreen
   if (quality.frameRate >= SCREEN_SHARE_MIN_FPS && typeof newTrack.contentHint !== 'undefined') {
     newTrack.contentHint = 'motion';
   }
-  if (quality.width && quality.height) {
-    try {
-      await newTrack.applyConstraints({
-        width: { ideal: quality.width, min: quality.width },
-        height: { ideal: quality.height, min: quality.height },
-        frameRate: frameRateConstraint,
-      });
-    } catch (err) {
-      console.warn('[livekit] Could not apply track constraints:', err);
-    }
-  } else {
-    try {
-      await newTrack.applyConstraints({ frameRate: frameRateConstraint });
-    } catch (err) {
-      console.warn('[livekit] Could not apply frameRate constraints:', err);
+  // See skipScreenShareConstraints: the desktop system picker breaks on
+  // applyConstraints, so skip the pinning there (browser behaviour unchanged).
+  if (!skipScreenShareConstraints()) {
+    if (quality.width && quality.height) {
+      try {
+        await newTrack.applyConstraints({
+          width: { ideal: quality.width, min: quality.width },
+          height: { ideal: quality.height, min: quality.height },
+          frameRate: frameRateConstraint,
+        });
+      } catch (err) {
+        console.warn('[livekit] Could not apply track constraints:', err);
+      }
+    } else {
+      try {
+        await newTrack.applyConstraints({ frameRate: frameRateConstraint });
+      } catch (err) {
+        console.warn('[livekit] Could not apply frameRate constraints:', err);
+      }
     }
   }
   await info.track.replaceTrack(newTrack);

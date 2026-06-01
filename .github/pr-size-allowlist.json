@@ -63,7 +63,7 @@
     "src/lib/preDecryptForLinkExport.test.js": 329,
     "src/lib/mlsStore.js": 864,
     "src/lib/mlsStore.test.js": 721,
-    "src/lib/trackManager.js": 345,
+    "src/lib/trackManager.js": 414,
     "src/lib/transcriptVault.js": 1127,
     "src/lib/transcriptVault.test.js": 859,
     "src/lib/transparencyVerifier.js": 346,
