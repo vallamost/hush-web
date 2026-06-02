@@ -1038,7 +1038,6 @@ export function VoiceChannelView({
       <VoiceDevicePickerDialog
         open={showOutputPicker}
         title="Choose audio output"
-        description="Route remote voices to a specific speaker or headset."
         devices={outputDevices}
         selectedDeviceId={prefs?.outputDeviceId ?? null}
         onSelect={(id) => void handlePickOutput(id)}
