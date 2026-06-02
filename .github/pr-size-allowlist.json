@@ -2,8 +2,9 @@
   "maxFilesPerPullRequest": 400,
   "maxLinesPerFile": 300,
   "oversizedFiles": {
+    "e2e/media/global-setup.ts": 338,
     "src/App.test.jsx": 483,
-    "src/App.jsx": 335,
+    "src/App.jsx": 342,
     "src/adapters/useChannelsForServer.test.tsx": 446,
     "src/adapters/useChannelsForServer.ts": 429,
     "src/audio/__tests__/CaptureGraphFactory.test.ts": 302,
