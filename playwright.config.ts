@@ -11,11 +11,20 @@ export default defineConfig({
   workers: 1,
   fullyParallel: false,
 
+  // One retry: real WebRTC media has inherent timing variance (the second
+  // participant's ICE/connection can need a fresh attempt). Retries reuse the
+  // already-running stack from globalSetup.
+  retries: 1,
+
   // Per-test timeout. Stack bring-up happens in globalSetup (not here).
   timeout: 60_000,
 
   use: {
     baseURL: PREVIEW_URL,
+
+    // Cap every action so a button covered by a stacked modal fails fast and the
+    // toPass() join loop can retry, instead of hanging until the test timeout.
+    actionTimeout: 15_000,
 
     // Fake media devices so the browser does not prompt for permissions in CI
     // and tests that join voice rooms get deterministic fake tracks.
