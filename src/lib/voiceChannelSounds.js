@@ -14,6 +14,8 @@
  */
 import joinSoundUrl from '../assets/sounds/join.mp3';
 import leaveSoundUrl from '../assets/sounds/leave.mp3';
+import streamStartSoundUrl from '../assets/sounds/streamStart.mp3';
+import streamEndSoundUrl from '../assets/sounds/streamEnd.mp3';
 
 const CUE_VOLUME = 0.6;
 
@@ -46,3 +48,7 @@ function createCue(url) {
 
 export const playVoiceJoinCue = createCue(joinSoundUrl);
 export const playVoiceLeaveCue = createCue(leaveSoundUrl);
+// Screen-share start/end cues. Fired when the screen-share track actually
+// publishes/subscribes (the live stream), not when the source picker opens.
+export const playVoiceStreamStartCue = createCue(streamStartSoundUrl);
+export const playVoiceStreamEndCue = createCue(streamEndSoundUrl);

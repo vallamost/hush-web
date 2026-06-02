@@ -6,7 +6,12 @@ import {
   recordKeyEpoch,
   recordDecryptFailure,
 } from '../lib/e2eeDiagnostics.js';
-import { playVoiceJoinCue, playVoiceLeaveCue } from '../lib/voiceChannelSounds.js';
+import {
+  playVoiceJoinCue,
+  playVoiceLeaveCue,
+  playVoiceStreamStartCue,
+  playVoiceStreamEndCue,
+} from '../lib/voiceChannelSounds.js';
 
 // Import E2EE worker for LiveKit encryption
 // @ts-ignore - Vite will resolve this URL correctly
@@ -645,10 +650,44 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
           if (track.kind === 'audio') {
             playbackManagerRef.current.addRemoteAudioTrack(track.sid, track.mediaStreamTrack);
           }
+          // HUSHHQ-119: everyone hears a peer's screen-share start. Fires when the
+          // track is actually received (subscribed), not on the source picker.
+          // The video source only, so the ScreenShareAudio companion never double-cues.
+          if (!isStale() && track.source === Track.Source.ScreenShare && track.kind === Track.Kind.Video) {
+            playVoiceStreamStartCue();
+          }
         });
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
           if (track.kind === 'audio') {
             playbackManagerRef.current.removeRemoteAudioTrack(track.sid);
+          }
+          // HUSHHQ-119: everyone hears a peer's screen-share end.
+          if (!isStale() && track.source === Track.Source.ScreenShare && track.kind === Track.Kind.Video) {
+            playVoiceStreamEndCue();
+          }
+        });
+
+        // HUSHHQ-119: the screen-sharer hears their own screen-share start/end.
+        // LocalTrackPublished fires after the track is published (the live
+        // stream begins), i.e. after the source picker resolves, never on picker
+        // open. Video source only, so the ScreenShareAudio companion never
+        // double-cues.
+        room.on(RoomEvent.LocalTrackPublished, (publication) => {
+          if (isStale()) return;
+          if (
+            publication.source === Track.Source.ScreenShare &&
+            publication.kind === Track.Kind.Video
+          ) {
+            playVoiceStreamStartCue();
+          }
+        });
+        room.on(RoomEvent.LocalTrackUnpublished, (publication) => {
+          if (isStale()) return;
+          if (
+            publication.source === Track.Source.ScreenShare &&
+            publication.kind === Track.Kind.Video
+          ) {
+            playVoiceStreamEndCue();
           }
         });
 
