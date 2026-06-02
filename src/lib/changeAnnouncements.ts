@@ -134,6 +134,8 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
     },
   },
   {
+    // Superseded by whats-new-2026-06-02b. Kept disabled so its seen marker
+    // still protects users who dismissed this variant.
     id: "whats-new-2026-06-02",
     version: "v0.7.0-alpha.27",
     // FOUNDER NOTE - DO NOT REMOVE OR PARAPHRASE without the founder's say-so.
@@ -150,6 +152,36 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
       "Screen sharing now works on the macOS desktop app.",
       "Fixed voice and video calls where people sometimes could not hear or see each other.",
       "Device linking now recovers from a stuck \"transfer slot occupied\" error.",
+    ],
+    surfaces: ["web", "desktop"],
+    enabled: false,
+    changelog: {
+      web: "https://github.com/hushhq/hush-web/blob/main/CHANGELOG.md",
+      desktop: "https://github.com/hushhq/hush-desktop/releases",
+    },
+    download: {
+      label: "Download",
+      href: "https://gethush.live/#downloads",
+    },
+  },
+  {
+    id: "whats-new-2026-06-02b",
+    version: "v0.7.0-alpha.28",
+    // FOUNDER NOTE - DO NOT REMOVE OR PARAPHRASE without the founder's say-so.
+    // This is intentional copy from the founder and must stay verbatim.
+    body:
+      "A note from the founder: Hush is a solo project and traffic is booming. " +
+      "Thank you for trying it, and please be patient while I work through your " +
+      "reports after my day job.",
+    warning:
+      "The Windows and Linux desktop app cannot auto-update yet. If it asks to " +
+      "restart but stays on the old version, download the latest manually.",
+    bullets: [
+      "Voice channels now play a sound when someone joins or leaves, and when a screen-share starts or ends.",
+      "Channel hover and the highlighted active channel are now clearly visible whether the glass effect is on or off, and no longer wash out with the wallpaper behind the window.",
+      "The bottom user menu and voice controls are easier to see on hover.",
+      "Device linking recovers from a stuck \"transfer slot occupied\" error.",
+      "Tidied the audio output picker.",
     ],
     surfaces: ["web", "desktop"],
     enabled: true,

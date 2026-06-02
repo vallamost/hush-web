@@ -4,6 +4,17 @@ All notable user-facing changes to the Hush web and desktop client are
 recorded here. Format is loosely based on Keep a Changelog. Dates are ISO
 8601. Versions track the `hush-web` package version.
 
+## [0.7.0-alpha.28] - 2026-06-02
+
+### Fixed
+- Desktop: channel hover and the active-channel highlight are now clearly
+  visible whether the translucency (glass) effect is on or off, and no longer
+  wash out depending on the desktop wallpaper behind the window. The bottom
+  user menu and voice controls got the same treatment, and the message composer
+  now lines up with the user menu. (HUSHHQ-123)
+- The audio output picker no longer shows a stray description line, matching the
+  microphone and camera pickers. (HUSHHQ-127)
+
 ## [0.7.0-alpha.27] - 2026-06-02
 
 ### Added
