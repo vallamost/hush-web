@@ -18,7 +18,7 @@
     "src/components/chat-real.tsx": 645,
     "src/components/chat/attachment-tile.tsx": 307,
     "src/components/chat/chat-event.tsx": 506,
-    "src/components/chat/chat-toolbar.tsx": 365,
+    "src/components/chat/chat-toolbar.tsx": 366,
     "src/components/devices/ApproveDeviceLinkFlow.jsx": 851,
     "src/components/devices/ApproveDeviceLinkFlow.test.jsx": 542,
     "src/components/members-sidebar.tsx": 437,
