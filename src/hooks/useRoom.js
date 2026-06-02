@@ -6,6 +6,7 @@ import {
   recordKeyEpoch,
   recordDecryptFailure,
 } from '../lib/e2eeDiagnostics.js';
+import { playVoiceJoinCue, playVoiceLeaveCue } from '../lib/voiceChannelSounds.js';
 
 // Import E2EE worker for LiveKit encryption
 // @ts-ignore - Vite will resolve this URL correctly
@@ -472,6 +473,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // event (handled below) triggers frame key re-derivation.
         room.on(RoomEvent.ParticipantConnected, (participant) => {
           if (isStale()) return;
+          // HUSHHQ-119: everyone already in the channel hears a peer join.
+          playVoiceJoinCue();
           console.log(`[livekit] Participant connected: ${participant.identity}`);
           setParticipants((prev) => {
             if (prev.some((p) => p.id === participant.identity)) return prev;
@@ -494,6 +497,8 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // share the voice frame key after it disconnected.
         room.on(RoomEvent.ParticipantDisconnected, (participant) => {
           if (isStale()) return;
+          // HUSHHQ-119: everyone remaining in the channel hears a peer leave.
+          playVoiceLeaveCue();
           console.log(`[livekit] Participant disconnected: ${participant.identity}`);
           setParticipants((prev) =>
             prev.filter((p) => p.id !== participant.identity),
@@ -652,6 +657,9 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         // above after MLS key derivation succeeded.
         room.on(RoomEvent.Connected, () => {
           if (isStale()) return;
+          // HUSHHQ-119: the joiner hears their own join (single cue; existing
+          // peers are not re-announced via ParticipantConnected on connect).
+          playVoiceJoinCue();
           recordClientDiagnostic({
             category: 'voice',
             event: 'livekit-connected',
@@ -704,6 +712,11 @@ export function useRoom({ wsClient, getToken, currentUserId, getStore, voiceKeyR
         });
 
         room.on(RoomEvent.Disconnected, () => {
+          // HUSHHQ-119: the leaver hears their own leave. Played before the
+          // stale guard so a channel switch (old room superseded by the new
+          // connect) still cues the departing channel's leave, then the new
+          // room's Connected cues the join.
+          playVoiceLeaveCue();
           if (isStale()) return;
           console.log('[livekit] Disconnected from room');
           recordClientDiagnostic({
