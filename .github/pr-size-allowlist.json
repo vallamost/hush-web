@@ -55,7 +55,7 @@
     "src/lib/identityVault.js": 570,
     "src/lib/linkArchive.js": 310,
     "src/lib/linkArchiveChunkAtomic.js": 487,
-    "src/lib/linkArchiveExportStore.js": 413,
+    "src/lib/linkArchiveExportStore.js": 431,
     "src/lib/linkArchiveSession.js": 640,
     "src/lib/linkArchiveTransport.js": 479,
     "src/lib/mlsGroup.js": 1102,
