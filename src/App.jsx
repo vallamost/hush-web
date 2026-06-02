@@ -16,6 +16,7 @@ import { UpdateRequiredDialog } from './components/UpdateRequiredDialog';
 import { StaleServerBanner } from './components/StaleServerBanner';
 import { StaleServerDesktopDialog } from './components/desktop/StaleServerDesktopDialog';
 import { DesktopManualUpdatePrompt } from './components/desktop/DesktopManualUpdatePrompt';
+import { E2eTestAuthBridge } from './components/dev/E2eTestAuthBridge.jsx';
 
 const UnauthenticatedShell = lazy(() =>
   import('./components/auth/unauthenticated-shell').then((m) => ({
@@ -323,6 +324,7 @@ export default function App() {
           <BootProvider>
             <FaviconThemeSync />
             <DesktopWindowFloorSync />
+            <E2eTestAuthBridge />
             <AppBackground />
             <StaleServerBanner />
             <StaleServerDesktopDialog />
