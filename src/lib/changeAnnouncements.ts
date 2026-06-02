@@ -24,22 +24,41 @@ export interface ChangeAnnouncementLink {
   readonly href: string
 }
 
+/** Surface-aware external changelog target (web vs desktop client). */
+export interface ChangeAnnouncementChangelog {
+  readonly web: string
+  readonly desktop: string
+}
+
 export interface ChangeAnnouncementEntry {
   /** Stable id used as the local "seen" marker. Never reused. */
   readonly id: string
   /** Subdued label shown in the dialog header, e.g. `v0.1.38-mvp`. */
   readonly version: string
-  /** Short title. Calm, product-grade. */
-  readonly title: string
+  /**
+   * Optional short title shown above the body. Omit it when the dialog
+   * header ("What's new") already conveys the heading, so the text does not
+   * repeat "What's new".
+   */
+  readonly title?: string
   /** Optional 1-line body shown below the title. */
   readonly body?: string
+  /**
+   * Optional caution shown as a warning block between the body and the
+   * bullets (e.g. the desktop auto-update caveat).
+   */
+  readonly warning?: string
   /** Concise bullets. Keep to <=5 entries, each one short sentence. */
   readonly bullets: readonly string[]
   /** Runtime surfaces this entry should appear on. */
   readonly surfaces: readonly ChangeAnnouncementSurface[]
   /** Hard switch. Disabled entries are ignored even if unseen. */
   readonly enabled: boolean
-  /** Optional secondary action shown as a quiet link. */
+  /** Optional external changelog link, resolved per surface in the dialog. */
+  readonly changelog?: ChangeAnnouncementChangelog
+  /** Optional external download link. */
+  readonly download?: ChangeAnnouncementLink
+  /** Legacy single quiet link. Retained for older (disabled) entries. */
   readonly link?: ChangeAnnouncementLink
 }
 
@@ -95,6 +114,8 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
     enabled: false,
   },
   {
+    // Superseded by whats-new-2026-06-02. Kept disabled so its seen marker
+    // still protects users who dismissed this variant.
     id: "whats-new-2026-05-29b",
     version: "v0.7.0-alpha.19",
     title: "What's new",
@@ -106,10 +127,39 @@ export const CHANGE_ANNOUNCEMENTS: readonly ChangeAnnouncementEntry[] = [
       "Looking for collaborators and active maintainers. Reach out if you are interested. All the love xx",
     ],
     surfaces: ["web", "desktop"],
-    enabled: true,
+    enabled: false,
     link: {
       label: "Download the latest desktop release",
       href: "https://github.com/hushhq/hush-desktop/releases/latest",
+    },
+  },
+  {
+    id: "whats-new-2026-06-02",
+    version: "v0.7.0-alpha.27",
+    // FOUNDER NOTE - DO NOT REMOVE OR PARAPHRASE without the founder's say-so.
+    // This is intentional copy from the founder and must stay verbatim.
+    body:
+      "A note from the founder: Hush is a solo project and traffic is booming. " +
+      "Thank you for trying it, and please be patient while I work through your " +
+      "reports after my day job.",
+    warning:
+      "The Windows and Linux desktop app cannot auto-update yet. If it asks to " +
+      "restart but stays on the old version, download the latest manually.",
+    bullets: [
+      "Voice channels now play a sound when someone joins or leaves, and when a screen-share starts or ends.",
+      "Screen sharing now works on the macOS desktop app.",
+      "Fixed voice and video calls where people sometimes could not hear or see each other.",
+      "Device linking now recovers from a stuck \"transfer slot occupied\" error.",
+    ],
+    surfaces: ["web", "desktop"],
+    enabled: true,
+    changelog: {
+      web: "https://github.com/hushhq/hush-web/blob/main/CHANGELOG.md",
+      desktop: "https://github.com/hushhq/hush-desktop/releases",
+    },
+    download: {
+      label: "Download",
+      href: "https://gethush.live/#downloads",
     },
   },
 ]

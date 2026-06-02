@@ -17,6 +17,7 @@
  */
 
 import * as React from "react"
+import { AlertTriangle, ArrowUpRight } from "lucide-react"
 
 import {
   Dialog,
@@ -27,8 +28,36 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import type { ChangeAnnouncementEntry } from "@/lib/changeAnnouncements"
+import { detectSurface } from "@/lib/changeAnnouncements"
 import { CLIENT_VERSION } from "@/lib/clientVersion"
 import { getDesktopBridge } from "@/lib/desktopBridge"
+
+/**
+ * Quiet external-link action. The trailing up-right arrow signals that the
+ * link opens an external page (changelog, download site) in a new tab,
+ * distinguishing it from the in-dialog "Got it" dismiss action.
+ */
+function ExternalLinkButton({
+  href,
+  label,
+}: {
+  readonly href: string
+  readonly label: string
+}) {
+  return (
+    <Button variant="ghost" size="sm" asChild>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        className="inline-flex items-center gap-1"
+      >
+        {label}
+        <ArrowUpRight className="size-3.5" aria-hidden="true" />
+      </a>
+    </Button>
+  )
+}
 
 /**
  * Version label shown in the dialog: the actual running build, not the
@@ -75,6 +104,7 @@ export function ChangeAnnouncementDialog({
     [onDismiss]
   )
   const runningVersion = useRunningClientVersion()
+  const changelogHref = entry?.changelog?.[detectSurface()] ?? null
 
   if (!entry) return null
 
@@ -92,9 +122,17 @@ export function ChangeAnnouncementDialog({
         </DialogHeader>
 
         <div className="flex max-h-[55vh] flex-col gap-3 overflow-y-auto pr-1">
-          <p className="text-foreground text-sm font-medium">{entry.title}</p>
+          {entry.title ? (
+            <p className="text-foreground text-sm font-medium">{entry.title}</p>
+          ) : null}
           {entry.body ? (
             <p className="text-muted-foreground text-sm">{entry.body}</p>
+          ) : null}
+          {entry.warning ? (
+            <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p className="text-xs leading-snug">{entry.warning}</p>
+            </div>
           ) : null}
           {entry.bullets.length > 0 ? (
             <ul className="text-foreground/90 list-disc space-y-1.5 pl-5 text-sm">
@@ -105,21 +143,25 @@ export function ChangeAnnouncementDialog({
           ) : null}
         </div>
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          {entry.link ? (
-            <Button
-              variant="ghost"
-              asChild
-              className="sm:mr-auto"
-            >
-              <a
-                href={entry.link.href}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                {entry.link.label}
-              </a>
-            </Button>
+        {/*
+          Footer hierarchy: "Got it" is the only real action (dismiss), so it is
+          the primary button. The changelog and download are external links
+          (new tab, signalled by the up-right arrow), grouped as quiet secondary
+          actions to the left.
+        */}
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end">
+          {changelogHref || entry.download ? (
+            <div className="flex flex-col gap-1 sm:mr-auto sm:flex-row sm:items-center sm:gap-1">
+              {changelogHref ? (
+                <ExternalLinkButton href={changelogHref} label="Changelog" />
+              ) : null}
+              {entry.download ? (
+                <ExternalLinkButton
+                  href={entry.download.href}
+                  label={entry.download.label}
+                />
+              ) : null}
+            </div>
           ) : null}
           <Button onClick={onDismiss} autoFocus>
             Got it

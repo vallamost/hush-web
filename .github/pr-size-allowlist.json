@@ -50,6 +50,7 @@
     "src/lib/api.js": 2075,
     "src/lib/api.test.js": 840,
     "src/lib/authInstanceStore.js": 318,
+    "src/lib/changeAnnouncements.ts": 341,
     "src/lib/deviceLinking.js": 441,
     "src/lib/hushCrypto.js": 313,
     "src/lib/identityVault.js": 570,
