@@ -70,6 +70,7 @@ export function ChatToolbar({
       {...props}
     >
       <div
+        data-slot="chat-composer"
         className={cn(
           "border rounded-md p-2",
           "flex flex-wrap items-start gap-x-2",

@@ -176,16 +176,98 @@ html[data-desktop="win32"][data-glass="on"] [data-slot="channel-card"] {
 
 /* ── Native window material: Glass off ───────────────────────────────────
    With glass disabled the authenticated shell paints with the opaque
-   sidebar token. The channel card, bottom-dock user menu, and voice
-   pip default to `bg-card`, which in the dark palette equals `--sidebar`
+   sidebar token. The channel card, bottom-dock user menu, and voice pip
+   default to `bg-card`, which in the dark palette equals `--sidebar`
    exactly and makes them disappear into the shell. Repaint those inner
-   panels with the `--secondary` token so they remain a distinct surface
-   from the rail without reintroducing the removed accent outlines. The
-   rule is scoped to desktop + `data-glass="off"` so the approved glass-on
-   look is untouched. */
+   panels with the distinct `--secondary` surface so they read apart from
+   the rail without reintroducing the removed accent outlines. Scoped to
+   `data-glass="off"`: with glass on the panels keep the translucent
+   `--desktop-chrome-bg` painted above. */
 html[data-desktop][data-glass="off"] [data-slot="channel-card"],
 html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] {
     background-color: var(--secondary) !important;
+}
+
+/* ── Channel row hover / active: backdrop-independent (HUSHHQ-123) ─────────
+   The window is transparent with native macOS vibrancy (window-config.ts:96),
+   so rows composite over the blurred desktop, and the palette is fully neutral
+   (every accent token is zero chroma). On a see-through neutral surface a
+   neutral highlight cannot be both always visible and backdrop-independent: an
+   opaque tint is a fixed lightness that collapses when the wallpaper matches
+   it; a translucent tint tracks the wallpaper and goes faint. The reliable cue
+   is therefore a shape, not a fill. The active channel carries a small opaque
+   `--foreground` bar at its left edge: `--foreground` is the maximum-contrast
+   color in either palette by definition, so an opaque bar reads on any
+   wallpaper. Hover and active also get a subtle frosted tint; it is kept light
+   on purpose because the bar, not the fill, carries the persistent state.
+   Applied to both glass states so the desktop treatment is consistent; over
+   the opaque glass-off panel the frost is the prior approved solid tint. The
+   row background is targeted directly (not the shared `--sidebar-accent`
+   token) so solid uses of the token, e.g. the drag drop-target highlight,
+   stay intact.
+
+   Rows are keyed on `data-sidebar`, not `data-slot`: regular channels wrap
+   `SidebarMenuButton` in `ContextMenuTrigger asChild`, which injects its own
+   `data-slot="context-menu-trigger"` that the button spreads last, so the
+   button's `data-slot="sidebar-menu-button"` is overwritten. `data-sidebar`
+   is set by the button and no trigger touches it, so it survives `asChild`
+   on every row (plain system rows and context/dropdown-wrapped ones alike). */
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-button"]:hover,
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-button"][data-active="true"],
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-sub-button"]:hover,
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-sub-button"][data-active="true"],
+html[data-desktop] [data-slot="channel-card"] [data-slot="sidebar-menu-action"]:hover,
+html[data-desktop] [data-slot="channel-card"] [data-slot="button"]:hover {
+    background-color: color-mix(in oklch, var(--foreground) 8%, transparent) !important;
+}
+
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-button"][data-active="true"],
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-sub-button"][data-active="true"] {
+    position: relative;
+}
+
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-button"][data-active="true"]::before,
+html[data-desktop] [data-slot="channel-card"] [data-sidebar="menu-sub-button"][data-active="true"]::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 60%;
+    width: 3px;
+    transform: translateY(-50%);
+    border-radius: 0 9999px 9999px 0;
+    background-color: var(--foreground);
+}
+
+/* ── Bottom dock hover (glass off) ────────────────────────────────────────
+   Glass off paints the bottom dock `--secondary` (above). Its user menu and
+   voice controls then read faintly on that surface: the controls use the
+   `secondary` button variant, which equals the panel, and the user-menu
+   trigger reuses the `--sidebar-accent`/`--secondary` collision. Route the
+   neutral buttons and the menu open-state through the same foreground frost
+   as the channel rows. Destructive (`bg-destructive`/`text-destructive`) and
+   active (`bg-primary`) controls are excluded so the danger and on-state cues
+   keep their own hover. Glass-on dock is untouched: there the panel is the
+   default card surface, not `--secondary`, so the controls already contrast. */
+html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] button[data-state="open"]:not(.text-destructive):not(.bg-destructive):not(.bg-primary),
+html[data-desktop][data-glass="off"] [data-slot="bottom-dock-panel"] button:not(.text-destructive):not(.bg-destructive):not(.bg-primary):hover {
+    background-color: color-mix(in oklch, var(--foreground) 12%, transparent) !important;
+}
+
+/* ── Composer height parity with the user menu ────────────────────────────
+   The bottom-dock user-menu card is 64px tall (the `h-14` trigger plus the
+   card's 0.5rem vertical inset) and bottom-aligns with the channel message
+   composer. The composer's bordered box renders ~58px from its content, so
+   its rounded surface sat a few pixels shorter than the user menu and the
+   two bottom panels read as mismatched. Floor the composer box at the same
+   64px so the two rounded surfaces match (the box bottom is already aligned;
+   the extra height extends upward because the wrapper is sticky to the
+   bottom). Center the content so the editor row sits mid-height instead of
+   pinned to the top by the box's `items-start` (which exists for the wrapped
+   attachment-dock row). Desktop-only: the parity target is the desktop dock. */
+html[data-desktop] [data-slot="chat-composer"] {
+    min-height: 4rem;
+    align-items: center;
 }
 
 .hush-desktop-topbar {
