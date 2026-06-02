@@ -26,6 +26,12 @@ export function scheduleBodyPointerEventsRestore(): void {
   }
 
   for (const delayMs of RESTORE_DELAYS_MS) {
-    window.setTimeout(() => restoreStaleBodyPointerEvents(document), delayMs)
+    window.setTimeout(() => {
+      // `document` is dereferenced at fire time, which can be after the page is
+      // gone (navigation) or after a test's jsdom env is torn down. Guard so a
+      // late timer no-ops instead of throwing an uncaught ReferenceError.
+      if (typeof document === "undefined") return
+      restoreStaleBodyPointerEvents(document)
+    }, delayMs)
   }
 }
