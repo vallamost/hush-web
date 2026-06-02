@@ -44,7 +44,7 @@
     "src/hooks/useInstances.test.jsx": 837,
     "src/hooks/useMLS.test.js": 429,
     "src/hooks/useMicMonitor.js": 326,
-    "src/hooks/useRoom.js": 1288,
+    "src/hooks/useRoom.js": 1316,
     "src/hooks/useRoom.voice.test.jsx": 1448,
     "src/hooks/useTextChannelMLSCommitListener.test.tsx": 505,
     "src/lib/api.js": 2075,
