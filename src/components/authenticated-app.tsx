@@ -1187,14 +1187,22 @@ export function AuthenticatedApp() {
           ...fromWs,
           {
             id: currentUserId,
-            name: "You",
+            name: `(You) ${myDisplayName}`,
             initials: myInitials,
             ...(selfOverrides ?? {}),
           },
         ]
       } else if (selfOverrides) {
+        // Self already in the WS roster: keep its display name but prefix
+        // "(You)" so the current user can spot themselves; others stay plain.
         merged = fromWs.map((p) =>
-          p.id === currentUserId ? { ...p, ...selfOverrides } : p,
+          p.id === currentUserId
+            ? {
+                ...p,
+                ...selfOverrides,
+                name: p.name?.trim() ? `(You) ${p.name}` : "(You)",
+              }
+            : p,
         )
       }
       return merged.length > 0 ? { ...c, participants: merged } : c
