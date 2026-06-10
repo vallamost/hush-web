@@ -622,6 +622,30 @@ export async function verifyChallenge(publicKeyBase64, nonce, signatureBase64, d
 }
 
 /**
+ * Update the authenticated user's editable profile fields. Only the display
+ * name is editable today; the username is immutable (derived from the BIP39
+ * root key) and is not accepted here. Returns the full updated user so the
+ * caller can refresh cached identity without a separate GET /me round-trip.
+ *
+ * @param {string} token - Session JWT.
+ * @param {string} displayName - New display name (trimmed server-side; empty clears it).
+ * @param {string} [baseUrl] - Instance base URL; defaults to the active instance.
+ * @returns {Promise<object>} The updated user.
+ */
+export async function updateDisplayName(token, displayName, baseUrl = '') {
+  const res = await fetchWithAuth(token, '/api/auth/me', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName }),
+  }, baseUrl);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw createApiHttpError(data, `updateDisplayName ${res.status}`, res.status);
+  }
+  return res.json();
+}
+
+/**
  * Authenticate on a foreign instance as a federated user.
  * Uses the same nonce from /challenge - the server verifies the Ed25519 signature
  * and upserts a federated_identity record instead of a local user.

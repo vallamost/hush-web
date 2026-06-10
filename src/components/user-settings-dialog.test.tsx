@@ -3,7 +3,7 @@
  * wired settings sections, routes Log out through confirmation, and
  * persists the Security → Vault timeout choice through useAuth.
  */
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest"
+import { describe, it, expect, vi, afterEach, beforeEach, beforeAll } from "vitest"
 import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
@@ -60,6 +60,15 @@ vi.mock("@/hooks/useAuth", () => ({
 import { UserSettingsDialog } from "./user-settings-dialog"
 
 describe("UserSettingsDialog", () => {
+  beforeEach(() => {
+    // Account panel now reads useAuth().updateProfile to save the display
+    // name. Provide a benign default; tests needing other auth fields (e.g.
+    // updateVaultTimeout) override with their own mockReturnValue.
+    mockUseAuth.mockReturnValue({
+      updateProfile: vi.fn().mockResolvedValue({}),
+    })
+  })
+
   afterEach(() => {
     cleanup()
     mockUseAuth.mockReset()
@@ -73,7 +82,7 @@ describe("UserSettingsDialog", () => {
     document.documentElement.style.removeProperty("--desktop-glass-alpha")
   })
 
-  it("renders username + display name from the account prop", () => {
+  it("renders username + an editable display-name field from the account prop", () => {
     render(
       <UserSettingsDialog
         open
@@ -82,11 +91,11 @@ describe("UserSettingsDialog", () => {
       />
     )
 
-    expect(screen.getByText("Yarin")).toBeInTheDocument()
+    expect(screen.getByLabelText("Display name")).toHaveValue("Yarin")
     expect(screen.getByText("yarin")).toBeInTheDocument()
   })
 
-  it("does not use username as the account display-name field fallback", () => {
+  it("leaves the display-name field empty (no username fallback) when unset", () => {
     render(
       <UserSettingsDialog
         open
@@ -95,11 +104,13 @@ describe("UserSettingsDialog", () => {
       />
     )
 
-    expect(screen.getByText("Not set")).toBeInTheDocument()
+    const field = screen.getByLabelText("Display name")
+    expect(field).toHaveValue("")
+    expect(field).toHaveAttribute("placeholder", "Not set")
     expect(screen.getByText("yarin")).toBeInTheDocument()
   })
 
-  it("normalizes legacy @username display names", () => {
+  it("shows the stored display name verbatim in the editable field", () => {
     render(
       <UserSettingsDialog
         open
@@ -108,7 +119,28 @@ describe("UserSettingsDialog", () => {
       />
     )
 
-    expect(screen.getAllByText("yarin")).toHaveLength(2)
+    expect(screen.getByLabelText("Display name")).toHaveValue("@yarin")
+    expect(screen.getByText("yarin")).toBeInTheDocument()
+  })
+
+  it("saves an edited display name through updateProfile (trimmed)", async () => {
+    const updateProfile = vi.fn().mockResolvedValue({ displayName: "New Name" })
+    mockUseAuth.mockReturnValue({ updateProfile })
+    const user = userEvent.setup()
+    render(
+      <UserSettingsDialog
+        open
+        onOpenChange={() => {}}
+        account={{ displayName: "Yarin", username: "yarin" }}
+      />
+    )
+
+    const field = screen.getByLabelText("Display name")
+    await user.clear(field)
+    await user.type(field, "  New Name  ")
+    await user.click(screen.getByRole("button", { name: "Save" }))
+
+    await waitFor(() => expect(updateProfile).toHaveBeenCalledWith("New Name"))
   })
 
   it("removes AI assistant and disables unwired settings sections", async () => {

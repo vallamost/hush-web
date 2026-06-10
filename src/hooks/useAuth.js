@@ -101,6 +101,7 @@ import {
   registerWithPublicKey,
   requestGuestSession,
   resolveAuthAudience,
+  updateDisplayName,
 } from '../lib/api';
 import {
   HOSTED_AUTH_INSTANCE_URL,
@@ -889,6 +890,18 @@ export function useAuth() {
   });
 
   const clearError = useCallback(() => setError(null), []);
+  // Update the authenticated user's editable profile (display name today) via
+  // PATCH /api/auth/me, then merge the server's authoritative user back into
+  // state so every consumer (sidebar, settings, message authorship) refreshes
+  // without a reload. baseUrl is omitted so the call targets the active instance.
+  const updateProfile = useCallback(async (displayName) => {
+    if (!token) {
+      throw new Error('Not authenticated');
+    }
+    const updated = await updateDisplayName(token, displayName);
+    setUser((previous) => (previous ? { ...previous, ...updated } : updated));
+    return updated;
+  }, [token]);
   const clearAuthInvalidation = useCallback(() => {
     localStorage.removeItem(AUTH_INVALIDATION_KEY);
     setAuthInvalidation(null);
@@ -2811,6 +2824,7 @@ export function useAuth() {
     updateVaultTimeout,
     skipPinSetup,
     performLogout,
+    updateProfile,
     clearError,
     clearAuthInvalidation,
     // Ref to the in-memory identity keypair. Used by useInstances for

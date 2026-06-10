@@ -18,6 +18,8 @@ import {
 } from "lucide-react"
 
 import { Separator } from "@/components/ui/separator.tsx"
+import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import {
   Field,
   FieldContent,
@@ -66,7 +68,7 @@ import {
   bridgeCanSwitchGlassMaterial,
   getDesktopBridge,
 } from "@/lib/desktopBridge"
-import { formatUserLabel, sanitizeDisplayName } from "@/lib/userLabel"
+import { formatUserLabel } from "@/lib/userLabel"
 import { HelpPanel } from "@/components/settings/help-panel"
 import { DesktopUpdatePanel } from "@/components/settings/desktop-update-panel"
 
@@ -786,35 +788,46 @@ function PlaceholderPanel({ title }: { title: string }) {
 }
 
 function AccountPanel({ account }: { account?: UserAccountInfo }) {
-  const displayName = sanitizeDisplayName(
-    account?.displayName,
-    account?.username
-  ) || "Not set"
+  const { updateProfile } = useAuth() as {
+    updateProfile: (displayName: string) => Promise<{ displayName?: string | null }>
+  }
   const username = formatUserLabel({ username: account?.username, fallback: "" })
-  // TODO(yarin, 2026-05-04): backend lacks email/phone/password endpoints
-  // — identity is currently mnemonic-derived. Edit actions deferred until
-  // profile-update API lands.
-  const fields: { label: string; value: React.ReactNode }[] = [
-    { label: "Display name", value: displayName },
-    {
-      label: "Username",
-      value: (
-        <UsernameHandle
-          username={username}
-          className="text-sm"
-          fallback={<span>Not set</span>}
-        />
-      ),
-    },
-  ]
+
+  const savedDisplayName = account?.displayName ?? ""
+  const [name, setName] = React.useState(savedDisplayName)
+  const [saving, setSaving] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [justSaved, setJustSaved] = React.useState(false)
+
+  // Resync when the upstream account changes (save propagation, account switch).
+  React.useEffect(() => {
+    setName(account?.displayName ?? "")
+  }, [account?.displayName])
+
+  const trimmed = name.trim()
+  const isDirty = trimmed !== savedDisplayName.trim()
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    setJustSaved(false)
+    try {
+      await updateProfile(trimmed)
+      setJustSaved(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save display name.")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-1">
         <h2 className="text-lg font-semibold">My account</h2>
         <p className="text-sm text-muted-foreground">
-          Identity is derived from your recovery phrase. Profile editing
-          requires backend support. Shipping soon.
+          Your display name is how others see you. Your username is derived from
+          your recovery phrase and cannot be changed.
         </p>
       </div>
 
@@ -824,23 +837,54 @@ function AccountPanel({ account }: { account?: UserAccountInfo }) {
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Identity
         </h3>
+
+        <div className="flex flex-col gap-2 rounded-lg border bg-card px-4 py-3">
+          <label
+            htmlFor="account-display-name"
+            className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
+          >
+            Display name
+          </label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="account-display-name"
+              value={name}
+              maxLength={128}
+              placeholder="Not set"
+              disabled={saving}
+              aria-invalid={error ? true : undefined}
+              onChange={(event) => {
+                setName(event.target.value)
+                setError(null)
+                setJustSaved(false)
+              }}
+            />
+            <Button onClick={handleSave} disabled={saving || !isDirty}>
+              {saving ? "Saving..." : "Save"}
+            </Button>
+          </div>
+          {error ? (
+            <span className="text-xs text-destructive">{error}</span>
+          ) : justSaved ? (
+            <span className="text-xs text-muted-foreground">Saved.</span>
+          ) : null}
+        </div>
+
         <div className="rounded-lg border bg-card">
-          {fields.map((field, idx) => (
-            <div
-              key={field.label}
-              className={
-                "flex items-center justify-between gap-4 px-4 py-3 " +
-                (idx < fields.length - 1 ? "border-b" : "")
-              }
-            >
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {field.label}
-                </span>
-                <span className="text-sm">{field.value}</span>
-              </div>
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <div className="flex flex-col gap-0.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Username
+              </span>
+              <span className="text-sm">
+                <UsernameHandle
+                  username={username}
+                  className="text-sm"
+                  fallback={<span>Not set</span>}
+                />
+              </span>
             </div>
-          ))}
+          </div>
         </div>
       </section>
     </div>
