@@ -57,6 +57,18 @@ const httpsServerOption = hasMkcertPair
     }
   : undefined;
 
+// Dev-proxy backend targets. Default to a local backend on the standard ports.
+// To develop against a remote full-stack instance (e.g. a VM running the stack
+// behind Caddy), export VITE_DEV_API_TARGET / VITE_DEV_LIVEKIT_TARGET:
+//   VITE_DEV_API_TARGET=https://192.168.1.75 \
+//   VITE_DEV_LIVEKIT_TARGET=https://192.168.1.75 npm run dev
+const apiProxyTarget = process.env.VITE_DEV_API_TARGET || 'http://localhost:8080';
+const livekitProxyTarget = process.env.VITE_DEV_LIVEKIT_TARGET || 'http://localhost:7880';
+// changeOrigin rewrites the Host header to the target; secure:false lets the
+// proxy accept the self-signed cert an IP-mode instance serves via Caddy.
+const isRemoteApiTarget = /^https:/i.test(apiProxyTarget);
+const isRemoteLivekitTarget = /^https:/i.test(livekitProxyTarget);
+
 export default defineConfig(({ mode }) => ({
   // Only these env prefixes are allowed to reach the client bundle. Local
   // debug flags such as VITE_ERUDA / VITE_DEBUG_TOOLBAR are consumed below as
@@ -115,15 +127,28 @@ export default defineConfig(({ mode }) => ({
       allow: ['..'],
     },
     proxy: {
-      '/api': 'http://localhost:8080',
+      '/api': {
+        target: apiProxyTarget,
+        changeOrigin: true,
+        secure: !isRemoteApiTarget,
+      },
       '/ws': {
-        target: 'http://localhost:8080',
+        target: apiProxyTarget,
         ws: true,
+        changeOrigin: true,
+        secure: !isRemoteApiTarget,
       },
       '/livekit': {
-        target: 'http://localhost:7880',
+        target: livekitProxyTarget,
         ws: true,
-        rewrite: (path) => path.replace(/^\/livekit/, ''),
+        changeOrigin: true,
+        secure: !isRemoteLivekitTarget,
+        // A remote instance fronts LiveKit with Caddy, which strips the
+        // /livekit prefix itself; only strip locally when proxying straight
+        // to the LiveKit container.
+        ...(isRemoteLivekitTarget
+          ? {}
+          : { rewrite: (path) => path.replace(/^\/livekit/, '') }),
       },
     },
   },

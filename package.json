@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:vm": "node scripts/dev-remote.js",
+    "dev:vm:https": "node scripts/dev-remote.js --https",
     "prebuild": "node scripts/copy-icons.js",
     "build": "vite build",
     "preview": "vite preview",
