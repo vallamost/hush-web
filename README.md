@@ -21,7 +21,7 @@ The `@gethush/hush-crypto` WASM package is published on [npmjs.com](https://www.
 **1. Clone and install:**
 
 ```bash
-git clone https://github.com/hushhq/hush-web
+git clone https://github.com/vallamost/hush-web
 cd hush-web
 npm ci
 ```
