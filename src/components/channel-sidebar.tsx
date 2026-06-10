@@ -1623,68 +1623,50 @@ function ChannelButton({
   )
 }
 
-const PARTICIPANT_AVATAR_LIMIT = 4
-
 function VoiceParticipantsGroup({
   participants,
 }: {
   participants: VoiceParticipant[]
 }) {
-  const visible = participants.slice(0, PARTICIPANT_AVATAR_LIMIT)
-  const overflow = participants.length - visible.length
-
+  // Named roster: every connected participant gets a full-width row with
+  // their avatar initial, full display name, and a trailing mute/deafen
+  // badge. Replaces the earlier compact overlapping-avatar stack so the
+  // display name is always visible while in the voice channel.
   return (
-    <Tooltip delayDuration={0}>
-      <TooltipTrigger asChild>
-        <div className="flex cursor-default items-center pb-1 pl-7 pt-1.5">
-          <div className="flex -space-x-1.5">
-            {visible.map((participant) => (
-              <span
-                key={participant.id}
-                className="relative flex size-5 items-center justify-center rounded-full bg-muted text-[9px] font-medium ring-2 ring-sidebar"
-              >
-                {participant.initials}
-                {/* Deafened wins over muted for the single badge slot:
-                    deaf implies mic muted in the LiveKit prejoin/voice
-                    controls, so showing both at the same anchor would
-                    overlap, and the headphone-off pictogram already
-                    communicates "no audio in/out". When only mic is
-                    muted (still hearing), show the mic-off badge. */}
-                {participant.isDeafened ? (
-                  <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-full bg-sidebar text-muted-foreground">
-                    <HeadphoneOffIcon className="size-2" />
-                  </span>
-                ) : participant.isMuted ? (
-                  <span className="absolute -bottom-0.5 -right-0.5 flex size-2.5 items-center justify-center rounded-full bg-sidebar text-muted-foreground">
-                    <MicOffIcon className="size-2" />
-                  </span>
-                ) : null}
-              </span>
-            ))}
-            {overflow > 0 ? (
-              <span className="relative flex size-5 items-center justify-center rounded-full bg-muted text-[9px] font-medium text-muted-foreground ring-2 ring-sidebar">
-                +{overflow}
-              </span>
-            ) : null}
-          </div>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent side="right" align="start" className="max-w-xs">
-        <ul className="flex flex-col gap-1">
-          {participants.map((participant) => (
-            <li key={participant.id} className="flex items-center gap-2 text-xs">
-              <span className="flex-1 truncate">{participant.name}</span>
-              {participant.isMuted ? (
-                <MicOffIcon className="size-3 shrink-0 opacity-70" />
-              ) : null}
-              {participant.isDeafened ? (
-                <HeadphoneOffIcon className="size-3 shrink-0 opacity-70" />
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </TooltipContent>
-    </Tooltip>
+    <ul className="flex flex-col gap-0.5 pb-1 pl-7 pr-2 pt-1">
+      {participants.map((participant) => (
+        <li
+          key={participant.id}
+          className="flex items-center gap-2 py-0.5"
+        >
+          <span
+            className={
+              "relative flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] font-medium " +
+              (participant.isSpeaking ? "ring-2 ring-primary/60" : "")
+            }
+          >
+            {participant.initials}
+          </span>
+          <span
+            className={
+              "flex-1 truncate text-xs " +
+              (participant.isSpeaking
+                ? "font-medium text-foreground"
+                : "text-sidebar-foreground/80")
+            }
+          >
+            {participant.name}
+          </span>
+          {/* Deafened wins over muted: deaf implies mic muted, and the
+              headphone-off pictogram already says "no audio in/out". */}
+          {participant.isDeafened ? (
+            <HeadphoneOffIcon className="size-3 shrink-0 text-muted-foreground" />
+          ) : participant.isMuted ? (
+            <MicOffIcon className="size-3 shrink-0 text-muted-foreground" />
+          ) : null}
+        </li>
+      ))}
+    </ul>
   )
 }
 
